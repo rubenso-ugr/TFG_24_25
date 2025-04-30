@@ -61,7 +61,7 @@ filled.contour(x, y, realization_matrix,
 
 
 #Guardamos el valor máximo global y de la primera realización.
-max_val <- max(sim_values_pos)
+#max_val <- max(sim_values_pos)
 max_val_rea1 <- max(sim_values_pos_rea1)
 
 

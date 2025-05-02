@@ -30,20 +30,23 @@ ui <- page_sidebar(
       numericInput("percentil", "Percentil", value = 0.15, min = 1e-20, max = 1),
       numericInput("realizaciones", "Realizaciones", value = 50, min = 1, max = 1000),
       selectInput("modelo", "Elige modelo", choices = c("Cauchy", "Gneiting")),
+      numericInput("ventana", "Tamaño ventana", value = 5, min = 2, max = 50),
+      numericInput("solapamiento", "Solapamiento", value = 2, min = 1, max = 15),
       actionButton("button", "Calcular")
     ),
     
     # Panel derecho con pestañas
     navset_card_underline(
-      nav_panel("Primera simulación", plotOutput("primera_simulacion"), downloadButton("downloadPlot", "Descargar imagen PNG", disabled = TRUE)),
-      nav_panel("Conjunto Excursión", plotOutput("conjunto_excursion")),
+      nav_panel("Primera simulación", plotOutput("primera_simulacion"), downloadButton("downloadPlot1", "Descargar imagen PNG", disabled = TRUE)),
+      nav_panel("Conjunto Excursión", plotOutput("conjunto_excursion"), downloadButton("downloadPlot2", "Descargar imagen PNG", disabled = TRUE)),
       nav_panel("Metodología aplicada",
                 plotOutput("metodología"),
                 selectInput("medida", "Medida de riesgo a usar", 
                             choices = c("VaR Histórico",
                                         "VaR Paramétrico",
                                         "VaR Montecarlo",
-                                        "ES"))),
+                                        "ES")),
+                downloadButton("downloadPlot3", "Descargar imagen PNG", disabled = TRUE)),
       nav_panel("Resumen", verbatimTextOutput("mensaje_resumen")),
     )
     
@@ -54,7 +57,56 @@ ui <- page_sidebar(
 # Define server ----------------------------------------------------------------
 
 server <- function(input, output, session) {
+  
+  #Consistencia tamaños ventana y solapamiento
+  
+  observe({
+    # Límite superior para la ventana: mínimo entre alto y ancho
+    max_ventana <- min(input$ancho, input$alto)
+    
+    # Actualizamos el input de la ventana
+    updateNumericInput(session, "ventana", max = max_ventana)
+    
+    # Aseguramos que el valor actual de ventana no sea mayor que el nuevo máximo
+    if (input$ventana > max_ventana) {
+      updateNumericInput(session, "ventana", value = max_ventana)
+    }
+  })
+  
+  observe({
+    # El máximo de solapamiento es el tamaño actual de la ventana
+    updateNumericInput(session, "solapamiento", max = input$ventana)
+    
+    # Aseguramos que el valor actual de solapamiento no sea mayor que el nuevo máximo
+    if (input$solapamiento > input$ventana) {
+      updateNumericInput(session, "solapamiento", value = input$ventana-1)
+    }
+  })
+  
+  
+  
+  
   observeEvent(input$button, {
+    
+    if (input$alpha <= 0 || input$alpha > 2) {
+      showModal(modalDialog(
+        title = "Error en parámetro alpha",
+        "El valor de alpha debe estar en el intervalo (0, 2].",
+        easyClose = TRUE
+      ))
+      return(NULL)  # no continúa la ejecución
+    }
+    
+    if (input$beta <= 0) {
+      showModal(modalDialog(
+        title = "Error en parámetro beta",
+        "El valor de beta debe ser mayor que 0.",
+        easyClose = TRUE
+      ))
+      return(NULL)  # no continúa la ejecución
+    }
+    
+    
     modelo <- switch(input$modelo,
                      "Cauchy" = RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1),
                      "Gneiting" = RMnsst(
@@ -129,8 +181,8 @@ server <- function(input, output, session) {
     
     
     # Definimos los parámetros para ventanas deslizantes
-    window_size <- 5        # tamaño de ventana 
-    overlap <- 1            # solapamiento entre ventanas 
+    window_size <- input$ventana        # tamaño de ventana 
+    overlap <- input$solapamiento            # solapamiento entre ventanas 
     step <- window_size - overlap
     alpha2 <- 0.05  #Segundo percentil a usar
     
@@ -292,7 +344,7 @@ server <- function(input, output, session) {
     
     #------------------------Descargar imagenes----------------------------------------------------------
     
-    output$downloadPlot <- downloadHandler(
+    output$downloadPlot1 <- downloadHandler(
       filename = function() {
         paste("primera_simulacion", Sys.Date(), ".png", sep = "")
       },
@@ -310,12 +362,39 @@ server <- function(input, output, session) {
       }
     )
     
+    output$downloadPlot2 <- downloadHandler(
+      filename = function() {
+        paste("primera_simulacion", Sys.Date(), ".png", sep = "")
+      },
+      content = function(file) {
+        png(file, width = 800, height = 800)
+        filled.contour(x, y, excursion_matrix,
+                       color.palette = mis.colores,
+                       asp = 1,
+                       axes = TRUE,
+                       frame.plot = 0,
+                       main = paste("Conjunto de Excursión (Realización", rea_to_show, ")"),
+                       xlim =  c(0, input$ancho),
+                       ylim =  c(0, input$alto),
+                       zlim = c(min_val_rea1 - min_val, max_val_rea1 - diferencia))
+        dev.off()
+      }
+    )
+    
     
     
   })
-  # Habilita el botón de descarga una vez haya un gráfico
+  
+  
+  
+  # Habilitamos el botón de descarga una vez haya un gráfico
   observeEvent(input$button, {
-    shinyjs::enable("downloadPlot")
+    shinyjs::enable("downloadPlot1")
+  })
+  
+  # Habilitamos el botón de descarga una vez haya un gráfico
+  observeEvent(input$button, {
+    shinyjs::enable("downloadPlot2")
   })
 }
 

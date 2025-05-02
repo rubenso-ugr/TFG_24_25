@@ -1,6 +1,8 @@
 # Load packages ----------------------------------------------------------------
 
 library(shiny)
+library(shinyjs)
+
 library(bslib)
 
 
@@ -16,9 +18,11 @@ rea_to_show <- 1 #Realización a mostrar
 
 # Define UI --------------------------------------------------------------------
 
-ui <- page_fluid(
-  layout_sidebar(
+ui <- page_sidebar(
+    theme = bs_theme(version = 5, bootswatch = "minty"),
+    title = "TFG Estadística espacial",
     sidebar = sidebar(
+      useShinyjs(), #para que no se pueda pulsar el boton de descarga antes de tiempo
       numericInput("ancho", "Ancho (pixeles)", value = 100, min = 1, max = 5000),
       numericInput("alto", "Alto (pixeles)", value = 100, min = 1, max = 5000),
       numericInput("alpha", "Alpha", value = 2, min = 1e-20, max = 2),
@@ -31,13 +35,19 @@ ui <- page_fluid(
     
     # Panel derecho con pestañas
     navset_card_underline(
-      nav_panel("Primera simulación", plotOutput("primera_simulacion")),
+      nav_panel("Primera simulación", plotOutput("primera_simulacion"), downloadButton("downloadPlot", "Descargar imagen PNG", disabled = TRUE)),
       nav_panel("Conjunto Excursión", plotOutput("conjunto_excursion")),
-      nav_panel("Metodología aplicada", plotOutput("metodología")),
-      nav_panel("Resumen", verbatimTextOutput("mensaje_resumen"))
-      
+      nav_panel("Metodología aplicada",
+                plotOutput("metodología"),
+                selectInput("medida", "Medida de riesgo a usar", 
+                            choices = c("VaR Histórico",
+                                        "VaR Paramétrico",
+                                        "VaR Montecarlo",
+                                        "ES"))),
+      nav_panel("Resumen", verbatimTextOutput("mensaje_resumen")),
     )
-  )
+    
+    
 )
 
 
@@ -114,7 +124,163 @@ server <- function(input, output, session) {
                      zlim = c(min_val_rea1 - min_val, max_val_rea1 - diferencia))
     })
     
+    
+    #Metodologia -----------------------------------------------------------------------
+    
+    
+    # Definimos los parámetros para ventanas deslizantes
+    window_size <- 5        # tamaño de ventana 
+    overlap <- 1            # solapamiento entre ventanas 
+    step <- window_size - overlap
+    alpha2 <- 0.05  #Segundo percentil a usar
+    
+    # Creamos una copia exacta de sim_values_pos para cada medida y metodologia a usar
+    refined_values_hist <- excursion_values  # VaR histórico
+    refined_values_param <- excursion_values # VaR paramétrico
+    refined_values_mc <- excursion_values    # VaR Monte Carlo
+    refined_values_es <- excursion_values    # Expected Shortfall
+    
+    # Recorremos la malla con ventanas deslizantes
+    for (i in seq(1, input$ancho, by = step)) {
+      for (j in seq(1, input$alto, by = step)) {
+        
+        # Ajustamos dinámicamente los tamaños de la ventana en i y j para poder recorrer todos los pixeles
+        actual_window_size_i <- min(window_size, input$ancho - i + 1)
+        actual_window_size_j <- min(window_size, input$alto - j + 1)
+        
+        # Índices espaciales de la ventana
+        indices_i <- i:(i + actual_window_size_i - 1)
+        indices_j <- j:(j + actual_window_size_j - 1)
+        
+        # Creamos la cuadrícula completa de coordenadas
+        grid <- expand.grid(i = indices_i, j = indices_j)
+        
+        # Convertimos a índices lineales
+        linear_indices <- (grid$i - 1) * input$alto + grid$j
+        
+        # Extraemos los datos de la ventana (todas las realizaciones)
+        window_data <- excursion_values[linear_indices, , drop = FALSE]
+        
+        mask_above_global <- window_data > 0
+        
+        if (any(mask_above_global)) {   # Comprobamos que haya algun valor que supere el umbral
+          
+          filtered_data <- window_data[mask_above_global] #Tomamos los valores de la ventana que han superado el primer umbral
+          
+          # VaR Histórico
+          var_hist <- quantile(filtered_data, probs = 1 - alpha2) 
+          #refined_values_hist[linear_indices, ][mask_above_global] <- var_hist
+          
+          # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
+          tmp <- refined_values_hist[linear_indices, , drop = FALSE]
+          tmp[mask_above_global] <- var_hist
+          refined_values_hist[linear_indices, ] <- tmp
+          
+          # VaR Paramétrico
+          mu <- mean(filtered_data)     # media
+          sigma <- sd(filtered_data)    # desv. tipica
+          z_alpha <- qnorm(1 - alpha2)  # cuantil de distrib. normal estandar a nivel de confianza 1- alpha2
+          var_param <- mu + sigma * z_alpha
+          #refined_values_param[linear_indices, ][mask_above_global] <- var_param
+          
+          
+          # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
+          tmp_param <- refined_values_param[linear_indices, , drop = FALSE]
+          tmp_param[mask_above_global] <- var_param
+          refined_values_param[linear_indices, ] <- tmp_param
+          
+          
+          
+          # VaR Monte Carlo (simulación normal simple con misma media y sigma)
+          sim_mc <- rnorm(10000, mean = mu, sd = sigma)   # conjunto de simulaciones
+          var_mc <- quantile(sim_mc, probs = 1 - alpha2)
+          #refined_values_mc[linear_indices, ][mask_above_global] <- var_mc
+          
+          # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
+          tmp_mc <- refined_values_mc[linear_indices, , drop = FALSE]
+          tmp_mc[mask_above_global] <- var_mc
+          refined_values_mc[linear_indices, ] <- tmp_mc
+          
+          
+          # Expected Shortfall histórico
+          es_val <- mean(filtered_data[filtered_data >= var_hist])
+          #refined_values_es[linear_indices, ][mask_above_global] <- es_val
+          
+          # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
+          tmp_es <- refined_values_es[linear_indices, , drop = FALSE]
+          tmp_es[mask_above_global] <- es_val
+          refined_values_es[linear_indices, ] <- tmp_es
+          
+          
+        }
+      }
+    }
+    
+    # Creamos matrices 2D de cada resultado para una realización
+    matrix_VaR_hist <- matrix(refined_values_hist[, rea_to_show], nrow = input$ancho, ncol = input$alto)
+    matrix_VaR_param <- matrix(refined_values_param[, rea_to_show], nrow = input$ancho, ncol = input$alto)
+    matrix_VaR_mc <- matrix(refined_values_mc[, rea_to_show], nrow = input$ancho, ncol = input$alto)
+    matrix_ES <- matrix(refined_values_es[, rea_to_show], nrow = input$ancho, ncol = input$alto)
+    
+    #Obtenemos el maximo de entre todas las simulaciones para que la comparación de colores sea correcta
+    max_z <- max(
+      refined_values_hist,
+      refined_values_param,
+      refined_values_mc,
+      refined_values_es,
+      na.rm = TRUE  # por si acaso hay NA
+    )
+    
+    
+  
+    
+    
+    output$metodología <- renderPlot({
+      switch(input$medida,
+             "VaR Histórico" = filled.contour(x, y, matrix_VaR_hist,
+                                              color.palette = mis.colores,
+                                              asp = 1,
+                                              axes = TRUE,
+                                              frame.plot = 0,
+                                              main = paste("VaR Histórico 95% - Realización", rea_to_show),
+                                              xlim = c(0, input$ancho),
+                                              ylim = c(0, input$alto),
+                                              zlim = c(0, max_z)),
+             "VaR Paramétrico" = filled.contour(x, y, matrix_VaR_param,
+                                                color.palette = mis.colores,
+                                                asp = 1,
+                                                axes = TRUE,
+                                                frame.plot = 0,
+                                                main = paste("VaR Paramétrico 95% - Realización", rea_to_show),
+                                                xlim = c(0, input$ancho),
+                                                ylim = c(0, input$alto),
+                                                zlim = c(0, max_z)),
+             "VaR Montecarlo" =  filled.contour(x, y, matrix_VaR_mc,
+                                                color.palette = mis.colores,
+                                                asp = 1,
+                                                axes = TRUE,
+                                                frame.plot = 0,
+                                                main = paste("VaR Monte Carlo 95% - Realización", rea_to_show),
+                                                xlim = c(0, input$ancho),
+                                                ylim = c(0, input$alto),
+                                                zlim = c(0, max_z)),
+             "ES" = filled.contour(x, y, matrix_ES,
+                                   color.palette = mis.colores,
+                                   asp = 1,
+                                   axes = TRUE,
+                                   frame.plot = 0,
+                                   main = paste("Expected Shortfall 95% - Realización", rea_to_show),
+                                   xlim = c(0, input$ancho),
+                                   ylim = c(0, input$alto),
+                                   zlim = c(0, max_z)))
+    })
+    
 
+    
+    
+    
+    
+    #------------------------------------------------------------------------------------
     
     output$mensaje_resumen <- renderPrint({
       cat("Min. global:", min_val, "\n")
@@ -124,7 +290,32 @@ server <- function(input, output, session) {
       cat("Umbral: ", threshold, "\n")
     })
     
+    #------------------------Descargar imagenes----------------------------------------------------------
     
+    output$downloadPlot <- downloadHandler(
+      filename = function() {
+        paste("primera_simulacion", Sys.Date(), ".png", sep = "")
+      },
+      content = function(file) {
+        png(file, width = 800, height = 800)
+        filled.contour(x, y, realization_matrix,
+                       color.palette = mis.colores,
+                       asp = 1,
+                       axes = TRUE,
+                       frame.plot = 0,
+                       main = paste("Realización", rea_to_show),
+                       xlim = c(0, input$ancho),
+                       ylim = c(0, input$alto))
+        dev.off()
+      }
+    )
+    
+    
+    
+  })
+  # Habilita el botón de descarga una vez haya un gráfico
+  observeEvent(input$button, {
+    shinyjs::enable("downloadPlot")
   })
 }
 

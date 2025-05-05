@@ -1,5 +1,6 @@
 library(RandomFieldsUtils)
 library(RandomFields)
+library(plot3D)
 
 mis.colores <- colorRampPalette(c("white", "blue", "lightgreen", "yellow", "red"))
 
@@ -9,9 +10,6 @@ n <- 150   # número de realizaciones
 alpha <- 0.1 # percentil
 rea_to_show <- 1 #Realización a mostrar
 
-# This is an arrange for when spatiotemporal random fields are simulated. There is no temporal horizon here.
-T<- c(1,1,1)
-
 # Modelo de Simulación
 modelo1 <- RMgencauchy(alpha=2,beta=0.1,var=0.1,scale=1) #Cauchy
 modelo2 <- RMnsst(phi=RMgencauchy(alpha=2,beta=0.1,var=0.1, scale=1),psi=RMstable(alpha=1.9,var=0.1,scale=1), delta=2) #Gneiting
@@ -20,13 +18,25 @@ modelo2 <- RMnsst(phi=RMgencauchy(alpha=2,beta=0.1,var=0.1, scale=1),psi=RMstabl
 x<-0:(N1-1)
 y<-0:(N2-1)
 
-modelo_elegido <- tolower(readline(prompt = "¿Que modelo quieres usar?(Por defecto Cauchy):\n1: Cauchy\n2: Gneiting"))
+sim<-RFsimulate(model=modelo1, x=x, y=y, T=c(1,1,1), n=n)
 
-if (modelo_elegido == "2") {
-  sim<-RFsimulate(model=modelo2, x=x, y=y, T=T, n=n)
-} else {
-  sim<-RFsimulate(model=modelo1, x=x, y=y, T=T, n=n)
-}
+# Calculamos la varianza por fila (cada píxel a través de las n simulaciones)
+varianzas_vector <- apply(sim_values, 1, var)
+
+# Lo reestructuramos a matriz 200x200
+mapa_varianzas <- matrix(varianzas_vector, nrow = N1, ncol = N2)
+
+
+filled.contour(x, y, mapa_varianzas,
+               color.palette = mis.colores,
+               asp = 1,
+               axes = TRUE,
+               frame.plot = 0,
+               main = paste("Mapa Varianzas"),
+               xlim = c(0, N1),
+               ylim = c(0, N2))
+
+
 
 #Recolección de todos los valores de todas las simulaciones realizadas
 sim_values <- matrix(unlist(sim@data), nrow = N1 * N2, ncol = n)
@@ -60,6 +70,23 @@ filled.contour(x, y, realization_matrix,
                ylim =  c(0, N2))
 
 
+# Calculamos la varianza por fila (cada píxel a través de las n simulaciones)
+varianzas_vector <- apply(sim_values, 1, var)
+
+# Lo reestructuramos a matriz 200x200
+mapa_varianzas <- matrix(varianzas_vector, nrow = N1, ncol = N2)
+
+
+filled.contour(x, y, mapa_varianzas,
+               color.palette = mis.colores,
+               asp = 1,
+               axes = TRUE,
+               frame.plot = 0,
+               main = paste("Mapa Varianzas"),
+               xlim = c(0, N1),
+               ylim = c(0, N2))
+
+
 #Guardamos el valor máximo global y de la primera realización.
 #max_val <- max(sim_values_pos)
 max_val_rea1 <- max(sim_values_pos_rea1)
@@ -91,16 +118,16 @@ filled.contour(x, y, excursion_matrix,
 #-------------------------------------------------------------------------------------
 
 # Definimos los parámetros para ventanas deslizantes
-window_size <- 5        # tamaño de ventana 
+window_size <- 3        # tamaño de ventana 
 overlap <- 1            # solapamiento entre ventanas 
 step <- window_size - overlap
-alpha2 <- 0.05  #Segundo percentil a usar
+alpha2 <- 0.1  #Segundo percentil a usar
 
 # Creamos una copia exacta de sim_values_pos para cada medida y metodologia a usar
-refined_values_hist <- excursion_values  # VaR histórico
-refined_values_param <- excursion_values # VaR paramétrico
-refined_values_mc <- excursion_values    # VaR Monte Carlo
-refined_values_es <- excursion_values    # Expected Shortfall
+refined_values_hist <- matrix(NA, nrow = N1, ncol = N2)
+refined_values_param <- matrix(NA, nrow = N1, ncol = N2) # VaR paramétrico
+refined_values_mc <- matrix(NA, nrow = N1, ncol = N2)    # VaR Monte Carlo
+refined_values_es <- matrix(NA, nrow = N1, ncol = N2)    # Expected Shortfall
 
 # Recorremos la malla con ventanas deslizantes
 for (i in seq(1, N1, by = step)) {
@@ -133,23 +160,18 @@ for (i in seq(1, N1, by = step)) {
       var_hist <- quantile(filtered_data, probs = 1 - alpha2) 
       #refined_values_hist[linear_indices, ][mask_above_global] <- var_hist
       
-            # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
-      tmp <- refined_values_hist[linear_indices, , drop = FALSE]
-      tmp[mask_above_global] <- var_hist
-      refined_values_hist[linear_indices, ] <- tmp
+      # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
+      refined_values_hist[linear_indices] <- var_hist
       
       # VaR Paramétrico
       mu <- mean(filtered_data)     # media
       sigma <- sd(filtered_data)    # desv. tipica
       z_alpha <- qnorm(1 - alpha2)  # cuantil de distrib. normal estandar a nivel de confianza 1- alpha2
       var_param <- mu + sigma * z_alpha
-      #refined_values_param[linear_indices, ][mask_above_global] <- var_param
       
-      
-            # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
-      tmp_param <- refined_values_param[linear_indices, , drop = FALSE]
-      tmp_param[mask_above_global] <- var_param
-      refined_values_param[linear_indices, ] <- tmp_param
+      # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
+
+      refined_values_param[linear_indices] <- var_param
       
       
       
@@ -158,10 +180,8 @@ for (i in seq(1, N1, by = step)) {
       var_mc <- quantile(sim_mc, probs = 1 - alpha2)
       #refined_values_mc[linear_indices, ][mask_above_global] <- var_mc
       
-            # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
-      tmp_mc <- refined_values_mc[linear_indices, , drop = FALSE]
-      tmp_mc[mask_above_global] <- var_mc
-      refined_values_mc[linear_indices, ] <- tmp_mc
+      # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
+      refined_values_mc[linear_indices] <- var_mc
       
       
       # Expected Shortfall histórico
@@ -169,23 +189,24 @@ for (i in seq(1, N1, by = step)) {
       #refined_values_es[linear_indices, ][mask_above_global] <- es_val
       
             # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
-      tmp_es <- refined_values_es[linear_indices, , drop = FALSE]
-      tmp_es[mask_above_global] <- es_val
-      refined_values_es[linear_indices, ] <- tmp_es
+      refined_values_es[linear_indices] <- es_val
       
       
     }
   }
 }
 
-# Creamos matrices 2D de cada resultado para una realización
-matrix_VaR_hist <- matrix(refined_values_hist[, rea_to_show], nrow = N1, ncol = N2)
-matrix_VaR_param <- matrix(refined_values_param[, rea_to_show], nrow = N1, ncol = N2)
-matrix_VaR_mc <- matrix(refined_values_mc[, rea_to_show], nrow = N1, ncol = N2)
-matrix_ES <- matrix(refined_values_es[, rea_to_show], nrow = N1, ncol = N2)
 
-#Obtenemos el maximo de entre todas las simulaciones para que la comparación de colores sea correcta
+#Obtenemos el maximo y el mínimo entre todas las simulaciones para que la comparación de colores sea correcta
 max_z <- max(
+  refined_values_hist,
+  refined_values_param,
+  refined_values_mc,
+  refined_values_es,
+  na.rm = TRUE  # por si acaso hay NA
+)
+
+min_z <- min(
   refined_values_hist,
   refined_values_param,
   refined_values_mc,
@@ -196,145 +217,123 @@ max_z <- max(
 
 # Dibujamos el conjunto de excursión de la realización escogida después de aplicar la metodología con diferentes medidas
 
-filled.contour(x, y, matrix_VaR_hist,
+filled.contour(x, y, refined_values_hist,
                color.palette = mis.colores,
                asp = 1,
                axes = TRUE,
                frame.plot = 0,
-               main = paste("VaR Histórico 95% - Realización", rea_to_show),
+               main = paste("VaR Histórico 95%"),
                xlim = c(0, N1),
                ylim = c(0, N2),
-               zlim = c(0, max_z))
+               zlim = c(min_z, max_z))
 
 
-filled.contour(x, y, matrix_VaR_param,
+filled.contour(x, y, refined_values_param,
                color.palette = mis.colores,
                asp = 1,
                axes = TRUE,
                frame.plot = 0,
-               main = paste("VaR Paramétrico 95% - Realización", rea_to_show),
+               main = paste("VaR Paramétrico 95%"),
                xlim = c(0, N1),
                ylim = c(0, N2),
-               zlim = c(0, max_z))
+               zlim = c(min_z, max_z))
 
- filled.contour(x, y, matrix_VaR_mc,
+ filled.contour(x, y, refined_values_mc,
                 color.palette = mis.colores,
                 asp = 1,
                 axes = TRUE,
                 frame.plot = 0,
-                main = paste("VaR Monte Carlo 95% - Realización", rea_to_show),
+                main = paste("VaR Monte Carlo 95%"),
                 xlim = c(0, N1),
                 ylim = c(0, N2),
-                zlim = c(0, max_z))
+                zlim = c(min_z, max_z))
  
- filled.contour(x, y, matrix_ES,
+ filled.contour(x, y, refined_values_es,
                 color.palette = mis.colores,
                 asp = 1,
                 axes = TRUE,
                 frame.plot = 0,
-                main = paste("Expected Shortfall 95% - Realización", rea_to_show),
+                main = paste("Expected Shortfall 95%"),
                 xlim = c(0, N1),
                 ylim = c(0, N2),
-                zlim = c(0, max_z))
+                zlim = c(min_z, max_z))
  
  
+ persp3D(x = x,
+         y = y,
+         z = refined_values_hist,
+         zlim = c(min_z, max_z),
+         col = mis.colores(300),
+         theta = 30,
+         phi = 20,
+         r = 50,
+         d = 0.1,
+         expand = 0.5,
+         ltheta = 90,
+         main = "VaR Histórico 95%",
+         lphi = 180,
+         shade = 0.3,
+         ticktype = "detailed",
+         nticks = 5,
+         cex.axis = 0.7,
+         zlab = "Values")
+ 
+ persp3D(x = x,
+         y = y,
+         z = refined_values_param,
+         zlim = c(min_z, max_z),
+         col = mis.colores(300),
+         theta = 30,
+         phi = 20,
+         r = 50,
+         d = 0.1,
+         expand = 0.5,
+         ltheta = 90,
+         main = "VaR Paramétrico 95%",
+         lphi = 180,
+         shade = 0.3,
+         ticktype = "detailed",
+         nticks = 5,
+         cex.axis = 0.7,
+         zlab = "Values")
+ 
+ persp3D(x = x,
+         y = y,
+         z = refined_values_mc,
+         zlim = c(min_z, max_z),
+         col = mis.colores(300),
+         theta = 30,
+         phi = 20,
+         r = 50,
+         d = 0.1,
+         expand = 0.5,
+         ltheta = 90,
+         main = "VaR Monte Carlo 95%",
+         lphi = 180,
+         shade = 0.3,
+         ticktype = "detailed",
+         nticks = 5,
+         cex.axis = 0.7,
+         zlab = "Values")
+ 
+ persp3D(x = x,
+         y = y,
+         z = refined_values_es,
+         zlim = c(min_z, max_z),
+         col = mis.colores(300),
+         theta = 30,
+         phi = 20,
+         r = 50,
+         d = 0.1,
+         expand = 0.5,
+         ltheta = 90,
+         main = "Expected Shortfall 95%",
+         lphi = 180,
+         shade = 0.3,
+         ticktype = "detailed",
+         nticks = 5,
+         cex.axis = 0.7,
+         zlab = "Values")
  
  
- #----------------------------------------------------------------------------------------------------------
- #-------------------Primer intento erroneo ---------------------------------------------------
- #----------------------------------------------------------------------------------------------------------
- #Definimos los parámetros para ventanas deslizantes
- window_size <- 50        # tamaño de ventana 
- overlap <- 10           # solapamiento entre ventanas 
- step <- window_size - overlap  # paso según el solapamiento
- alpha2 <- 0.05
- 
- # Preguntamos si se quiere un umbral propio
- use_custom_alpha <- tolower(readline(prompt = "¿Quieres usar un umbral propio? (s/n): "))
- 
- if (use_custom_alpha == "s") {
-   custom_alpha_input <- readline(prompt = "Introduce el valor del umbral (por ejemplo, 0.6): ")
-   custome_threshold <- as.numeric(custom_alpha_input)
- } else {
-   cat("Usando percentil por defecto:", (1 - alpha2)*100, "%\n")
- }
- 
- 
- # Creamos una copia exacta de sim_values_pos
- refined_values <- excursion_values
- 
- # Recorremos la malla con ventanas deslizantes
- for (i in seq(1, N1, by = step)) {
-   for (j in seq(1, N2, by = step)) {
-     
-     # Ajustamos dinámicamente los tamaños de la ventana en i y j
-     actual_window_size_i <- min(window_size, N1 - i + 1)
-     actual_window_size_j <- min(window_size, N2 - j + 1)
-     
-     # Índices espaciales de la ventana
-     indices_i <- i:(i + actual_window_size_i - 1)
-     indices_j <- j:(j + actual_window_size_j - 1)
-     
-     # Creamos la cuadrícula completa de coordenadas (producto cartesiano)
-     grid <- expand.grid(i = indices_i, j = indices_j)
-     
-     # Convertimos a índices lineales
-     linear_indices <- (grid$i - 1) * N2 + grid$j
-     
-     # Extraemos los datos de la ventana (todas las realizaciones)
-     window_data <- excursion_values[linear_indices, , drop = FALSE]
-     
-     if (use_custom_alpha != "s") {
-       
-       mask_above_global <- window_data > 0
-       
-       if (any(mask_above_global)) {
-         
-         filtered_data <- window_data[mask_above_global]
-         
-         local_threshold <- quantile(filtered_data, probs = 1 - alpha2)
-         
-         # Creamos la máscara lógica completa
-         mask_below_threshold <- window_data < local_threshold
-         
-         # Asignamos 0 a los valores por debajo del umbral directamente en refined_values
-         temp_window_data <- window_data
-         temp_window_data[mask_below_threshold] <- 0
-         
-         # Guardamos en la matriz global
-         refined_values[linear_indices, ] <- temp_window_data
-         
-       }
-       
-     }else{
-       
-       # Creamos la máscara lógica sobre los valores inferiores al umbral personalizado
-       mask_below_custom_threshold <- window_data < custome_threshold
-       
-       # Creamos una copia temporal de la ventana para modificar
-       temp_window_data <- window_data
-       temp_window_data[mask_below_custom_threshold] <- 0
-       
-       # Guardamos la ventana modificada en la matriz global
-       refined_values[linear_indices, ] <- temp_window_data
-     }
-     
-     
-   }
- }
- 
- 
- #Tomamos el conjunto de excursión de la primera realización
- realization_matrix2 <- matrix(refined_values[, rea_to_show], nrow = N1, ncol = N2)
- 
- # Dibujamos el conjunto de excursión de la primera realización
- filled.contour(x, y, realization_matrix2,
-                color.palette = mis.colores,
-                asp = 1,
-                axes = TRUE,
-                frame.plot = 0,
-                main = paste("Conjunto de Excursión Segundo (Realización", rea_to_show, ")"),
-                xlim =  c(0, N1),
-                ylim =  c(0, N2),
-                zlim = c(min_val_rea1 - min_val, max_val_rea1 - diferencia))
  

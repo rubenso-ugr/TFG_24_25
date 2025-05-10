@@ -2,20 +2,19 @@
 
 library(shiny)
 library(shinyjs)
-
 library(bslib)
-
-
 library(RandomFieldsUtils)
 library(RandomFields)
+
+
+library(plotly)
+library(magrittr)
 
 source("procesamiento_simulaciones.R")
 
 mis.colores <- colorRampPalette(c("white", "blue", "lightgreen", "yellow", "red"))
 
 rea_to_show <- 1 #Realización a mostrar
-
-valores <- reactiveValues(form_confirmado = FALSE)
 
 
 # Define UI --------------------------------------------------------------------
@@ -32,8 +31,8 @@ ui <- page_sidebar(
       numericInput("percentil", "Percentil", value = 0.15, min = 1e-20, max = 1),
       numericInput("realizaciones", "Realizaciones", value = 50, min = 1, max = 1000),
       selectInput("modelo", "Elige modelo", choices = c("Cauchy", "Gneiting")),
-      numericInput("ventana", "Tamaño ventana", value = 5, min = 2, max = 50),
-      numericInput("solapamiento", "Solapamiento", value = 2, min = 1, max = 15),
+      numericInput("ventana", "Tamaño ventana", value = 5, min = 1, max = 50),
+      numericInput("solapamiento", "Solapamiento", value = 1, min = 1, max = 15),
       selectInput("modo", "Selecciona el modo:", choices = c("Simulación", "Formulario")),
       actionButton("button", "Calcular"),
       
@@ -48,18 +47,43 @@ ui <- page_sidebar(
     
     # Panel derecho con pestañas
     navset_card_underline(
-      nav_panel("Primera simulación", plotOutput("primera_simulacion"), downloadButton("downloadPlot1", "Descargar imagen PNG", disabled = TRUE)),
-      nav_panel("Conjunto Excursión", plotOutput("conjunto_excursion"), downloadButton("downloadPlot2", "Descargar imagen PNG", disabled = TRUE)),
-      nav_panel("Mapa de varianzas",  plotOutput("mapa_varianzas"), downloadButton("downloadPlot3", "Descargar imagen PNG", disabled = TRUE)),
+      nav_panel("Primera simulación",
+                selectInput("visualizacion_primera_simulacion", "Visualización", 
+                            choices = c("2D", "3D")),
+                div(
+                  style = " height: 100%; overflow-y: auto;",
+                  uiOutput("primera_simulacion"), 
+                ),
+                downloadButton("downloadPlot1", "Descargar imagen PNG", disabled = TRUE)
+      ),
+      nav_panel("Conjunto Excursión",
+                plotOutput("conjunto_excursion",  width = "100%", height = "100%"),
+                downloadButton("downloadPlot2", "Descargar imagen PNG", disabled = TRUE)
+                ),
+      nav_panel("Mapa de varianzas",
+                plotOutput("mapa_varianzas",  width = "100%", height = "100%")
+                , downloadButton("downloadPlot3", "Descargar imagen PNG", disabled = TRUE)
+                ),
       nav_panel("Metodología aplicada",
-                plotOutput("metodología"),
-                selectInput("medida", "Medida de riesgo a usar", 
-                            choices = c("VaR Histórico",
-                                        "VaR Paramétrico",
-                                        "VaR Montecarlo",
-                                        "ES")),
-                downloadButton("downloadPlot3", "Descargar imagen PNG", disabled = TRUE)),
-      nav_panel("Resumen", verbatimTextOutput("mensaje_resumen")),
+                fluidRow(
+                  column(6,
+                         selectInput("medida", "Medida de riesgo a usar", 
+                                     choices = c("VaR Histórico", "VaR Paramétrico", "VaR Montecarlo", "ES"))
+                  ),
+                  column(6,
+                         selectInput("visualizacion_medida", "Visualización", 
+                                     choices = c("2D", "3D"))
+                  )
+                ),
+                div(
+                  style = " height: 100%; overflow-y: auto;",
+                  uiOutput("metodologia_plot")
+                ),
+                downloadButton("downloadPlot3", "Descargar imagen PNG", disabled = TRUE)
+      ),
+      nav_panel("Resumen", 
+                verbatimTextOutput("mensaje_resumen")
+                )
     )
     
     
@@ -73,9 +97,9 @@ server <- function(input, output, session) {
   observeEvent(input$button, {
     if (input$modo == "Formulario") {
       showModal(modalDialog(
-        title = "Formulario dinámico",
+        title = "Valores condicionales",
         tagList(
-          numericInput("n_filas_modal", "Número de filas:", value = 1, min = 1),
+          numericInput("n_filas_modal", "Número de valores:", value = 1, min = 1),
           uiOutput("formulario_dinamico")
         ),
         footer = tagList(
@@ -94,14 +118,16 @@ server <- function(input, output, session) {
       n <- input$n_filas_modal
       formularios <- lapply(1:n, function(i) {
         fluidRow(
-          column(4, numericInput(paste0("fila_", i, "_val1"), paste("Fila", i, "- Valor 1"), value = 0)),
-          column(4, numericInput(paste0("fila_", i, "_val2"), paste("Fila", i, "- Valor 2"), value = 0)),
-          column(4, numericInput(paste0("fila_", i, "_val3"), paste("Fila", i, "- Valor 3"), value = 0))
+          column(4, numericInput(paste0("fila_", i, "_val1"), paste("X"), value = 0, min = 0, max = input$ancho -1)),
+          column(4, numericInput(paste0("fila_", i, "_val2"), paste("Y"), value = 0,  min = 0, max=input$alto -1)),
+          column(4, numericInput(paste0("fila_", i, "_val3"), paste("Valor"), value = 0))
         )
       })
       do.call(tagList, formularios)
     })
   })
+  
+  
   
   
   #Consistencia tamaños ventana y solapamiento
@@ -170,19 +196,40 @@ server <- function(input, output, session) {
         x <- 0:(input$ancho - 1)
         y <- 0:(input$alto - 1)
         
+        set.seed(123) 
+        
         sim <- RFsimulate(model = modelo, x = x, y = y, T = c(1, 1, 1), n = input$realizaciones)
         
         sim_values <- matrix(unlist(sim@data), nrow = input$ancho * input$alto, ncol = input$realizaciones)
         
-        modulo_simulacion(sim_values, x, y, input, output, rea_to_show, mis.colores)
-  }
+        umbral2 <- 0.05  #Segundo percentil a usar
+        
+        threshold <- modulo_simulacion(sim_values, x, y, input, output, rea_to_show, mis.colores)
+        modulo_metodologia(sim_values, x, y, input, output, rea_to_show, mis.colores, threshold)
+        
+    }
     
   })
   
   
+  data1 <- eventReactive(input$calcular_formulario, {
+    req(input$n_filas_modal)
+    n <- input$n_filas_modal
+    
+    # Extraer los valores del formulario
+    x_vals <- sapply(1:n, function(i) input[[paste0("fila_", i, "_val1")]])
+    y_vals <- sapply(1:n, function(i) input[[paste0("fila_", i, "_val2")]])
+    value_vals <- sapply(1:n, function(i) input[[paste0("fila_", i, "_val3")]])
+    
+    # Crear el data.frame
+    data.frame(x = x_vals, y = y_vals, value = value_vals)
+  })
+  
+  # Simulación condicionada después de pulsar "calcular_formulario"
   observeEvent(input$calcular_formulario, {
     removeModal()
   })
+  
   
   
   
@@ -190,13 +237,7 @@ server <- function(input, output, session) {
   
   observeEvent(input$button, {
     shinyjs::enable("downloadPlot1")
-  })
-  
-  observeEvent(input$button, {
     shinyjs::enable("downloadPlot2")
-  })
-  
-  observeEvent(input$button, {
     shinyjs::enable("downloadPlot3")
   })
   

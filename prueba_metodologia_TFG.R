@@ -2,6 +2,10 @@ library(RandomFieldsUtils)
 library(RandomFields)
 library(plot3D)
 
+
+library(plotly)
+library(magrittr)
+
 mis.colores <- colorRampPalette(c("white", "blue", "lightgreen", "yellow", "red"))
 
 N1 <- 200  # filas
@@ -41,6 +45,41 @@ filled.contour(x, y, realization_matrix,
                xlim =  c(0, N1),
                ylim =  c(0, N2),
                zlim = c(min_val, max_val_rea))
+
+n_colors <- 100
+plotly_colors <- mis.colores(n_colors)
+
+# Mapear colores a valores entre min_val y max_val
+color_scale <- lapply(seq(min_val, max_val_rea, length.out = n_colors), function(val) {
+  scaled_val <- (val - min_val) / (max_val_rea - min_val)
+  list(scaled_val, plotly_colors[round(scaled_val * (n_colors - 1)) + 1])
+})
+
+
+fig <- plot_ly(z = ~t(realization_matrix)) %>% 
+  add_surface(
+    colorscale = color_scale,
+    contours = list(
+      z = list(
+        show = TRUE,
+        usecolormap = TRUE,
+        highlightcolor = "white",
+        project = list(z = TRUE)
+      )
+    )
+  ) %>%
+  layout(
+    scene = list(
+      xaxis = list(title = "X"),
+      yaxis = list(title = "Y"),
+      zaxis = list(title = "Valor")
+    )
+  )
+# Display of the interactive object
+fig
+
+
+
 
 
 # Calculamos la varianza por fila (cada píxel a través de las n simulaciones)
@@ -116,9 +155,9 @@ for (i in seq(1, N1, by = step)) {
     linear_indices <- (grid$i - 1) * N2 + grid$j
     
     # Extraemos los datos de la ventana (todas las realizaciones)
-    window_data <- excursion_values[linear_indices, , drop = FALSE]
+    window_data <- sim_values[linear_indices, , drop = FALSE]
     
-    mask_above_global <- window_data > 0
+    mask_above_global <- window_data >= threshold
     
     if (any(mask_above_global)) {   # Comprobamos que haya algun valor que supere el umbral
       

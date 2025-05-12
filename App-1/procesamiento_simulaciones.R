@@ -1,8 +1,12 @@
-modulo_simulacion <- function(sim_values, x, y, input, output, rea_to_show, mis.colores) {
+mis.colores <- colorRampPalette(c("white", "blue", "lightgreen", "yellow", "red"))
+rea_to_show <- 1 #Realización a mostrar
+
+modulo_simulacion <- function(sim_values, x, y, input, output) {
 
   
   alto <- input$alto
   ancho <- input$ancho
+  percentil_1 <- input$percentil_1
   
   min_val <- min(sim_values)
   max_val <- max(sim_values)
@@ -72,7 +76,7 @@ modulo_simulacion <- function(sim_values, x, y, input, output, rea_to_show, mis.
   
   #Estimamos el umbral de riesgo (percentil 1 - alpha)
   all_vals <- as.vector(sim_values)
-  threshold <- quantile(all_vals, probs = 1 - input$percentil)
+  threshold <- quantile(all_vals, probs = 1 - percentil_1)
 
   
   #Obtenemos el conjunto de excursión (asignamos min_val a valores por debajo del umbral en TODAS las realizaciones)
@@ -119,24 +123,94 @@ modulo_simulacion <- function(sim_values, x, y, input, output, rea_to_show, mis.
                    ylim = c(0, alto))
   })
   
+  
+  #------------------------Descargar imagenes----------------------------------------------------------
+  
+  output$downloadPlot1 <- downloadHandler(
+    filename = function() {
+      paste("simulacion", Sys.Date(), ".png", sep = "")
+    },
+    content = function(file) {
+      png(file, width = 800, height = 800)
+      filled.contour(x, y, realization_matrix,
+                     color.palette = mis.colores,
+                     asp = 1,
+                     axes = TRUE,
+                     frame.plot = 0,
+                     main = paste("Realización", rea_to_show),
+                     xlim = c(0, ancho),
+                     ylim = c(0, alto))
+      dev.off()
+    }
+  )
+  
+  output$downloadPlot2 <- downloadHandler(
+    filename = function() {
+      paste("simulacion_excursion", Sys.Date(), ".png", sep = "")
+    },
+    content = function(file) {
+      png(file, width = 800, height = 800)
+      filled.contour(x, y, excursion_matrix,
+                     color.palette = mis.colores,
+                     asp = 1,
+                     axes = TRUE,
+                     frame.plot = 0,
+                     main = paste("Conjunto de Excursión (Realización", rea_to_show, ")"),
+                     xlim =  c(0, ancho),
+                     ylim =  c(0, alto),
+                     zlim = c(min_val_rea1 - min_val, max_val_rea1 - diferencia))
+      dev.off()
+    }
+  )
+  
+  output$downloadPlot3 <- downloadHandler(
+    filename = function() {
+      paste("mapa_varianzas", Sys.Date(), ".png", sep = "")
+    },
+    content = function(file) {
+      png(file, width = 800, height = 800)
+      filled.contour(x, y, mapa_varianzas,
+                     color.palette = mis.colores,
+                     asp = 1,
+                     axes = TRUE,
+                     frame.plot = 0,
+                     main = paste("Mapa de Varianzas"),
+                     xlim =  c(0, ancho),
+                     ylim =  c(0, alto))
+      dev.off()
+    }
+  )
+  
+  
+  #----------------------- Resumen -------------------------------------------------------------
+  
+  output$mensaje_resumen <- renderPrint({
+    cat("Min. global:", min_val, "\n")
+    cat("Max. global:", max_val, "\n")
+    cat("Max. realizacion mostrada:", max_val_rea, "\n")
+    cat("Primer Umbral: ", threshold, "\n")
+  })
+  
+  
   return(threshold)
   
 }
   
   
-  #Metodologia -----------------------------------------------------------------------
+#Metodologia -----------------------------------------------------------------------
   
-  modulo_metodologia <- function(sim_values, x, y, input, output, rea_to_show, mis.colores, threshold, umbral2) {
+modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
     
   alto <- input$alto
-  ancho <- input$ancho  
+  ancho <- input$ancho
+  percentil_2 <- input$percentil_2
     
   # Definimos los parámetros para ventanas deslizantes
   window_size <- input$ventana        # tamaño de ventana 
   overlap <- input$solapamiento            # solapamiento entre ventanas 
   step <- window_size - overlap
   
-  # Creamos una copia exacta de sim_values_pos para cada medida y metodologia a usar
+  # Creamos una matriz para cada medida y metodologia a usar
   refined_values_hist <- matrix(NA, nrow = ancho, ncol = alto)  # VaR histórico
   refined_values_param <- matrix(NA, nrow = ancho, ncol = alto) # VaR paramétrico
   refined_values_mc <- matrix(NA, nrow = ancho, ncol = alto)    # VaR Monte Carlo
@@ -163,7 +237,7 @@ modulo_simulacion <- function(sim_values, x, y, input, output, rea_to_show, mis.
       # Extraemos los datos de la ventana (todas las realizaciones)
       window_data <- sim_values[linear_indices, , drop = FALSE]
       
-      mask_above_global <- window_data > threshold
+      mask_above_global <- window_data >= threshold
       
       if (any(mask_above_global)) {   # Comprobamos que haya algun valor que supere el umbral
         
@@ -173,7 +247,7 @@ modulo_simulacion <- function(sim_values, x, y, input, output, rea_to_show, mis.
         if (all(is.na(filtered_data)) || length(filtered_data) == 0) {
           var_hist <- threshold
         } else {
-          var_hist <- quantile(filtered_data, probs = 1 - umbral2, na.rm = TRUE)
+          var_hist <- quantile(filtered_data, probs = 1 - percentil_2, na.rm = TRUE)
         }
         
         refined_values_hist[linear_indices] <- var_hist
@@ -184,7 +258,7 @@ modulo_simulacion <- function(sim_values, x, y, input, output, rea_to_show, mis.
         } else {
           mu <- mean(filtered_data, na.rm = TRUE)
           sigma <- sd(filtered_data, na.rm = TRUE)
-          z_alpha <- qnorm(1 - umbral2)
+          z_alpha <- qnorm(1 - percentil_2)
           var_param <- mu + sigma * z_alpha
         }
         
@@ -195,7 +269,7 @@ modulo_simulacion <- function(sim_values, x, y, input, output, rea_to_show, mis.
           var_mc <- threshold
         } else {
           sim_mc <- rnorm(10000, mean = mu, sd = sigma)
-          var_mc <- quantile(sim_mc, probs = 1 - umbral2, na.rm = TRUE)
+          var_mc <- quantile(sim_mc, probs = 1 - percentil_2, na.rm = TRUE)
         }
         
         refined_values_mc[linear_indices] <- var_mc
@@ -257,7 +331,7 @@ modulo_simulacion <- function(sim_values, x, y, input, output, rea_to_show, mis.
                    asp = 1,
                    axes = TRUE,
                    frame.plot = 0,
-                   main = sprintf("%s %.0f%%", input$medida, (1 - umbral2) * 100),
+                   main = sprintf("%s %.0f%%", input$medida, (1 - percentil_2) * 100),
                    xlim = c(0, ancho),
                    ylim = c(0, alto))
   })
@@ -292,77 +366,93 @@ modulo_simulacion <- function(sim_values, x, y, input, output, rea_to_show, mis.
         )
       )
   })
-  
-  
-  
-  
-  
-  
-  #------------------------------------------------------------------------------------
-  
-  output$mensaje_resumen <- renderPrint({
-    cat("Min. global:", min_val, "\n")
-    cat("Max. global:", max_val, "\n")
-    cat("Max. realizacion mostrada:", max_val_rea, "\n")
-    cat("Primer Umbral: ", threshold, "\n")
-  })
-  
-  #------------------------Descargar imagenes----------------------------------------------------------
-  
-  output$downloadPlot1 <- downloadHandler(
-    filename = function() {
-      paste("simulacion", Sys.Date(), ".png", sep = "")
-    },
-    content = function(file) {
-      png(file, width = 800, height = 800)
-      filled.contour(x, y, realization_matrix,
-                     color.palette = mis.colores,
-                     asp = 1,
-                     axes = TRUE,
-                     frame.plot = 0,
-                     main = paste("Realización", rea_to_show),
-                     xlim = c(0, ancho),
-                     ylim = c(0, alto))
-      dev.off()
-    }
-  )
-  
-  output$downloadPlot2 <- downloadHandler(
-    filename = function() {
-      paste("simulacion_excursion", Sys.Date(), ".png", sep = "")
-    },
-    content = function(file) {
-      png(file, width = 800, height = 800)
-      filled.contour(x, y, excursion_matrix,
-                     color.palette = mis.colores,
-                     asp = 1,
-                     axes = TRUE,
-                     frame.plot = 0,
-                     main = paste("Conjunto de Excursión (Realización", rea_to_show, ")"),
-                     xlim =  c(0, ancho),
-                     ylim =  c(0, alto),
-                     zlim = c(min_val_rea1 - min_val, max_val_rea1 - diferencia))
-      dev.off()
-    }
-  )
-  
-  output$downloadPlot3 <- downloadHandler(
-    filename = function() {
-      paste("mapa_varianzas", Sys.Date(), ".png", sep = "")
-    },
-    content = function(file) {
-      png(file, width = 800, height = 800)
-      filled.contour(x, y, excursion_matrix,
-                     color.palette = mis.colores,
-                     asp = 1,
-                     axes = TRUE,
-                     frame.plot = 0,
-                     main = paste("Mapa de Varianzas"),
-                     xlim =  c(0, ancho),
-                     ylim =  c(0, alto))
-      dev.off()
-    }
-  )
-  
-  
+ 
 }
+
+
+
+
+### Funciones Auxiliares para Validación de datos ###
+
+validar_parametro_ab_cer <- function(nombre, valor, min_valor, max_valor) {
+  
+  # Verifica que no esté vacío
+  if (!isTruthy(valor)) {
+    showModal(modalDialog(
+      title = paste("Error en parámetro", nombre),
+      paste("El valor de", nombre, "no puede estar vacío."),
+      footer = modalButton("Cerrar"),
+      size = "l", easyClose = TRUE
+    ))
+    return(FALSE)
+  }
+  
+  # Verifica que esté en el rango correcto
+  if (valor <= min_valor || valor > max_valor) {
+    showModal(modalDialog(
+      title = paste("Error en parámetro", nombre),
+      paste("El valor de", nombre, "debe estar en el rango (", min_valor, ",", max_valor, "]."),
+      footer = modalButton("Cerrar"),
+      size = "l", easyClose = TRUE
+    ))
+    return(FALSE)
+  }
+  
+  return(TRUE)
+}
+
+validar_parametro_ab_ab <- function(nombre, valor, min_valor, max_valor = Inf) {
+  
+  # Verifica que no esté vacío
+  if (!isTruthy(valor)) {
+    showModal(modalDialog(
+      title = paste("Error en parámetro", nombre),
+      paste("El valor de", nombre, "no puede estar vacío."),
+      footer = modalButton("Cerrar"),
+      size = "l", easyClose = TRUE
+    ))
+    return(FALSE)
+  }
+  
+  # Verifica que esté en el rango correcto
+  if (valor <= min_valor || valor >= max_valor) {
+    showModal(modalDialog(
+      title = paste("Error en parámetro", nombre),
+      paste("El valor de", nombre, "debe estar en el rango (", min_valor, ",", max_valor, "]."),
+      footer = modalButton("Cerrar"),
+      size = "l", easyClose = TRUE
+    ))
+    return(FALSE)
+  }
+  
+  return(TRUE)
+}
+
+validar_parametro_cer_ab <- function(nombre, valor, min_valor, max_valor = Inf) {
+  
+  # Verifica que no esté vacío
+  if (!isTruthy(valor)) {
+    showModal(modalDialog(
+      title = paste("Error en parámetro", nombre),
+      paste("El valor de", nombre, "no puede estar vacío."),
+      footer = modalButton("Cerrar"),
+      size = "l", easyClose = TRUE
+    ))
+    return(FALSE)
+  }
+  
+  # Verifica que esté en el rango correcto
+  if (valor < min_valor || valor >= max_valor) {
+    showModal(modalDialog(
+      title = paste("Error en parámetro", nombre),
+      paste("El valor de", nombre, "debe estar en el rango (", min_valor, ",", max_valor, "]."),
+      footer = modalButton("Cerrar"),
+      size = "l", easyClose = TRUE
+    ))
+    return(FALSE)
+  }
+  
+  return(TRUE)
+}
+
+

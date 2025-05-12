@@ -12,11 +12,6 @@ library(magrittr)
 
 source("procesamiento_simulaciones.R")
 
-mis.colores <- colorRampPalette(c("white", "blue", "lightgreen", "yellow", "red"))
-
-rea_to_show <- 1 #Realización a mostrar
-
-
 # Define UI --------------------------------------------------------------------
 
 ui <- page_sidebar(
@@ -24,18 +19,18 @@ ui <- page_sidebar(
     title = "TFG Estadística espacial",
     sidebar = sidebar(
       useShinyjs(), #para que no se pueda pulsar el boton de descarga antes de tiempo
-      numericInput("ancho", "Ancho (pixeles)", value = 100, min = 1, max = 5000),
-      numericInput("alto", "Alto (pixeles)", value = 100, min = 1, max = 5000),
+      numericInput("ancho", "Ancho (pixeles)", value = 100, min = 3, max = 5000),
+      numericInput("alto", "Alto (pixeles)", value = 100, min = 3, max = 5000),
       numericInput("alpha", "Alpha", value = 2, min = 1e-20, max = 2),
       numericInput("beta", "Beta", value = 0.1, min = 1e-20),
-      numericInput("percentil", "Percentil", value = 0.15, min = 1e-20, max = 1),
+      numericInput("percentil_1", "Primer percentil", value = 0.15, min = 1e-20, max = 1),
+      numericInput("percentil_2", "Segundo percentil", value = 0.05, min = 1e-20, max = 1),
       numericInput("realizaciones", "Realizaciones", value = 50, min = 1, max = 1000),
       selectInput("modelo", "Elige modelo", choices = c("Cauchy", "Gneiting")),
-      numericInput("ventana", "Tamaño ventana", value = 5, min = 1, max = 50),
-      numericInput("solapamiento", "Solapamiento", value = 1, min = 1, max = 15),
+      numericInput("ventana", "Tamaño ventana", value = 5, min = 2),
+      numericInput("solapamiento", "Solapamiento", value = 1, min = 1),
       selectInput("modo", "Selecciona el modo:", choices = c("Simulación", "Formulario")),
       actionButton("button", "Calcular"),
-      
     ),
     
     # UI del formulario dinámico
@@ -90,10 +85,13 @@ ui <- page_sidebar(
 )
 
 
-# Define server ----------------------------------------------------------------
+# Define server ----------------------------------------------------------------------------------------------------------------
 
 server <- function(input, output, session) {
   
+  ### Manejo de Modales y Formularios Dinámicos ###
+  
+  # Muestra el modal para modo 'Formulario'
   observeEvent(input$button, {
     if (input$modo == "Formulario") {
       showModal(modalDialog(
@@ -111,139 +109,123 @@ server <- function(input, output, session) {
     }
   })
   
-  # Generamos el formulario según el número de filas ingresado en el modal
+  # Generación dinámica del formulario dentro del modal
   observe({
     req(input$n_filas_modal)
     output$formulario_dinamico <- renderUI({
       n <- input$n_filas_modal
       formularios <- lapply(1:n, function(i) {
         fluidRow(
-          column(4, numericInput(paste0("fila_", i, "_val1"), paste("X"), value = 0, min = 0, max = input$ancho -1)),
-          column(4, numericInput(paste0("fila_", i, "_val2"), paste("Y"), value = 0,  min = 0, max=input$alto -1)),
-          column(4, numericInput(paste0("fila_", i, "_val3"), paste("Valor"), value = 0))
+          column(4, numericInput(paste0("fila_", i, "_val1"), "X", value = 0, min = 0, max = input$ancho - 1)),
+          column(4, numericInput(paste0("fila_", i, "_val2"), "Y", value = 0, min = 0, max = input$alto - 1)),
+          column(4, numericInput(paste0("fila_", i, "_val3"), "Valor", value = 0))
         )
       })
       do.call(tagList, formularios)
     })
   })
   
-  
-  
-  
-  #Consistencia tamaños ventana y solapamiento
-  
-  observe({
-    # Límite superior para la ventana: mínimo entre alto y ancho
-    max_ventana <- min(input$ancho, input$alto)
-    
-    # Actualizamos el input de la ventana
-    updateNumericInput(session, "ventana", max = max_ventana)
-    
-    # Aseguramos que el valor actual de ventana no sea mayor que el nuevo máximo
-    if (input$ventana > max_ventana) {
-      updateNumericInput(session, "ventana", value = max_ventana)
-    }
-  })
-  
-  observe({
-    # El máximo de solapamiento es el tamaño actual de la ventana
-    updateNumericInput(session, "solapamiento", max = input$ventana, min = 1)
-    
-    # Ajustamos el valor actual si está fuera del nuevo rango permitido
-    nuevo_valor <- input$solapamiento
-    if (input$solapamiento > input$ventana) {
-      nuevo_valor <- input$ventana
-    } else if (input$solapamiento < 1) {
-      nuevo_valor <- 1
-    }
-    
-    updateNumericInput(session, "solapamiento", value = nuevo_valor)
-  })
-
-  
-  observeEvent(input$button, {
-    
-    
-        
-        if (input$alpha <= 0 || input$alpha > 2) {
-          showModal(modalDialog(
-            title = "Error en parámetro alpha",
-            "El valor de alpha debe estar en el intervalo (0, 2].",
-            easyClose = TRUE
-          ))
-          return(NULL)  # no continúa la ejecución
-        }
-        
-        if (input$beta <= 0) {
-          showModal(modalDialog(
-            title = "Error en parámetro beta",
-            "El valor de beta debe ser mayor que 0.",
-            easyClose = TRUE
-          ))
-          return(NULL)  # no continúa la ejecución
-        }
-      
-    if (input$modo == "Simulación") {  
-        
-        modelo <- switch(input$modelo,
-                         "Cauchy" = RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1),
-                         "Gneiting" = RMnsst(
-                           phi = RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1),
-                           psi = RMstable(alpha = input$alpha, var = 0.1, scale = 1),
-                           delta = 2
-                         ))
-        
-        x <- 0:(input$ancho - 1)
-        y <- 0:(input$alto - 1)
-        
-        set.seed(123) 
-        
-        sim <- RFsimulate(model = modelo, x = x, y = y, T = c(1, 1, 1), n = input$realizaciones)
-        
-        sim_values <- matrix(unlist(sim@data), nrow = input$ancho * input$alto, ncol = input$realizaciones)
-        
-        umbral2 <- 0.05  #Segundo percentil a usar
-        
-        threshold <- modulo_simulacion(sim_values, x, y, input, output, rea_to_show, mis.colores)
-        modulo_metodologia(sim_values, x, y, input, output, rea_to_show, mis.colores, threshold)
-        
-    }
-    
-  })
-  
-  
+  # Procesa los datos del formulario al hacer clic en 'Simular'
   data1 <- eventReactive(input$calcular_formulario, {
     req(input$n_filas_modal)
     n <- input$n_filas_modal
-    
-    # Extraer los valores del formulario
-    x_vals <- sapply(1:n, function(i) input[[paste0("fila_", i, "_val1")]])
-    y_vals <- sapply(1:n, function(i) input[[paste0("fila_", i, "_val2")]])
-    value_vals <- sapply(1:n, function(i) input[[paste0("fila_", i, "_val3")]])
-    
-    # Crear el data.frame
-    data.frame(x = x_vals, y = y_vals, value = value_vals)
+    data.frame(
+      x = sapply(1:n, function(i) input[[paste0("fila_", i, "_val1")]]),
+      y = sapply(1:n, function(i) input[[paste0("fila_", i, "_val2")]]),
+      value = sapply(1:n, function(i) input[[paste0("fila_", i, "_val3")]])
+    )
   })
   
-  # Simulación condicionada después de pulsar "calcular_formulario"
+  # Cierra el modal después de simular
   observeEvent(input$calcular_formulario, {
     removeModal()
   })
   
   
+  ### Consistencia de tamaños de ventana y solapamiento ###
   
+  observe({
+    
+    # Solo continúa si el valor es numérico y no está vacío
+    if (!isTruthy(input$ventana)) return()
+    if (!isTruthy(input$ancho)) return()
+    if (!isTruthy(input$alto)) return()
+    if (!isTruthy(input$solapamiento)) return()
+    
+    #Comprobación tamaño de la ventana
+    
+    # Límite superior para la ventana: mínimo entre alto y ancho
+    max_ventana <- min(input$ancho, input$alto)
+    
+    # Actualiza el input de la ventana
+    updateNumericInput(session, "ventana", max = max_ventana)
+    
+    # Ajusta el valor actual si supera el máximo
+    if (input$ventana >= max_ventana) {
+      updateNumericInput(session, "ventana", value = max_ventana)
+    }
+
+    # Comprobación del solapamiento
+    
+    # Ajusta los límites del input de solapamiento
+    updateNumericInput(session, "solapamiento", max = input$ventana, min = 1)
+    
+    # Corrige valores fuera de rango
+    if (input$solapamiento >= input$ventana) {
+      updateNumericInput(session, "solapamiento", value = input$ventana-1)
+    } else if (input$solapamiento < 1) {
+      updateNumericInput(session, "solapamiento", value = 1)
+    }
+  })
   
-  # Habilitamos el botón de descarga una vez haya un gráfico
+
+  ### Lógica de simulación ###
+  
+  observeEvent(input$button, {
+    
+    # Validación de parámetros #
+
+    if (!validar_parametro_ab_cer("alpha", input$alpha, 0, 2)) return(NULL)
+    if (!validar_parametro_ab_ab("beta", input$beta, 0)) return(NULL)
+    if (!validar_parametro_ab_ab("primer percentil", input$percentil_1, 0, 1)) return(NULL)
+    if (!validar_parametro_ab_ab("segundo percentil", input$percentil_2, 0, 1)) return(NULL)
+    if (!validar_parametro_cer_ab("ancho (píxeles)", input$ancho, 3)) return(NULL)
+    if (!validar_parametro_cer_ab("alto (píxeles)", input$alto, 3)) return(NULL)
+    if (!validar_parametro_cer_ab("realizaciones", input$realizaciones, 1)) return(NULL)
+    if (!validar_parametro_cer_ab("ventana", input$ventana, 2)) return(NULL)
+    if (!validar_parametro_cer_ab("solapamiento", input$solapamiento, 1)) return(NULL)
+
+    
+    if (input$modo == "Simulación") {  
+      modelo <- switch(input$modelo,
+                       "Cauchy" = RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1),
+                       "Gneiting" = RMnsst(
+                         phi = RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1),
+                         psi = RMstable(alpha = input$alpha, var = 0.1, scale = 1),
+                         delta = 2
+                       ))
+      set.seed(123)
+      x <- 0:(input$ancho - 1)
+      y <- 0:(input$alto - 1)
+      sim <- RFsimulate(model = modelo, x = x, y = y, T = c(1, 1, 1), n = input$realizaciones)
+      sim_values <- matrix(unlist(sim@data), nrow = input$ancho * input$alto, ncol = input$realizaciones)
+      threshold <- modulo_simulacion(sim_values, x, y, input, output)
+      modulo_metodologia(sim_values, x, y, input, output, threshold)
+    }
+  })
+  
+  ### Habilitación de botones de descarga ###
   
   observeEvent(input$button, {
     shinyjs::enable("downloadPlot1")
     shinyjs::enable("downloadPlot2")
     shinyjs::enable("downloadPlot3")
   })
+
   
 }
 
  
-# Create the Shiny app object --------------------------------------------------
+# Create the Shiny app object ---------------------------------------------------------------------------------------------
 
 shinyApp(ui = ui, server = server)

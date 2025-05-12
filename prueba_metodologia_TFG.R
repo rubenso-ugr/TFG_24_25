@@ -11,8 +11,9 @@ mis.colores <- colorRampPalette(c("white", "blue", "lightgreen", "yellow", "red"
 N1 <- 200  # filas
 N2 <- 200  # columnas
 n <- 150   # número de realizaciones
-alpha <- 0.15 # percentil
-rea_to_show <- 5 #Realización a mostrar
+alpha <- 0.15 # Primer percentil a usar
+alpha2 <- 0.1  #Segundo percentil a usar
+rea_to_show <- 1 #Realización a mostrar
 
 # Modelo de Simulación
 modelo1 <- RMgencauchy(alpha=2,beta=0.1,var=0.1,scale=1) #Cauchy
@@ -46,6 +47,7 @@ filled.contour(x, y, realization_matrix,
                ylim =  c(0, N2),
                zlim = c(min_val, max_val_rea))
 
+
 n_colors <- 100
 plotly_colors <- mis.colores(n_colors)
 
@@ -55,6 +57,7 @@ color_scale <- lapply(seq(min_val, max_val_rea, length.out = n_colors), function
   list(scaled_val, plotly_colors[round(scaled_val * (n_colors - 1)) + 1])
 })
 
+#Dibujamos la realización escogida en 3D
 
 fig <- plot_ly(z = ~t(realization_matrix)) %>% 
   add_surface(
@@ -75,17 +78,15 @@ fig <- plot_ly(z = ~t(realization_matrix)) %>%
       zaxis = list(title = "Valor")
     )
   )
-# Display of the interactive object
+
+#Dibujamos la realización escogida en 3D
 fig
-
-
-
 
 
 # Calculamos la varianza por fila (cada píxel a través de las n simulaciones)
 varianzas_vector <- apply(sim_values, 1, var)
 
-# Lo reestructuramos a matriz 200x200
+# Reestructuramos a una matriz 
 mapa_varianzas <- matrix(varianzas_vector, nrow = N1, ncol = N2)
 
 #Dibujamos el mapa de varianas de las simulaciones realizadas
@@ -128,9 +129,8 @@ filled.contour(x, y, excursion_matrix,
 window_size <- 3        # tamaño de ventana 
 overlap <- 1            # solapamiento entre ventanas 
 step <- window_size - overlap
-alpha2 <- 0.1  #Segundo percentil a usar
 
-# Creamos una copia exacta de sim_values_pos para cada medida y metodologia a usar
+# Creamos una matriz para cada medida y metodologia a usar
 refined_values_hist <- matrix(NA, nrow = N1, ncol = N2)
 refined_values_param <- matrix(NA, nrow = N1, ncol = N2) # VaR paramétrico
 refined_values_mc <- matrix(NA, nrow = N1, ncol = N2)    # VaR Monte Carlo
@@ -163,36 +163,46 @@ for (i in seq(1, N1, by = step)) {
       
       filtered_data <- window_data[mask_above_global] #Tomamos los valores de la ventana que han superado el primer umbral
       
-      # VaR Histórico
-      var_hist <- quantile(filtered_data, probs = 1 - alpha2) 
 
-            # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
+      # VaR Histórico
+      if (all(is.na(filtered_data)) || length(filtered_data) == 0) { #Comprobamos que hayan valores para poder realizar la estimación, en caso contrario tomamos el  valore del primer umbral
+        var_hist <- threshold
+      } else {
+        var_hist <- quantile(filtered_data, probs = 1 - alpha2, na.rm = TRUE)
+      }
+      
       refined_values_hist[linear_indices] <- var_hist
       
       # VaR Paramétrico
-      mu <- mean(filtered_data)     # media
-      sigma <- sd(filtered_data)    # desv. tipica
-      z_alpha <- qnorm(1 - alpha2)  # cuantil de distrib. normal estandar a nivel de confianza 1- alpha2
-      var_param <- mu + sigma * z_alpha
+      if (all(is.na(filtered_data)) || length(filtered_data) == 0) {
+        var_param <- threshold
+      } else {
+        mu <- mean(filtered_data, na.rm = TRUE)
+        sigma <- sd(filtered_data, na.rm = TRUE)
+        z_alpha <- qnorm(1 - alpha2)
+        var_param <- mu + sigma * z_alpha
+      }
       
-            # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
-
       refined_values_param[linear_indices] <- var_param
       
+      # VaR Monte Carlo
+      if (all(is.na(filtered_data)) || length(filtered_data) == 0) {
+        var_mc <- threshold
+      } else {
+        sim_mc <- rnorm(10000, mean = mu, sd = sigma)
+        var_mc <- quantile(sim_mc, probs = 1 - alpha2, na.rm = TRUE)
+      }
       
-      
-      # VaR Monte Carlo (simulación normal simple con misma media y sigma)
-      sim_mc <- rnorm(10000, mean = mu, sd = sigma)   # conjunto de simulaciones
-      var_mc <- quantile(sim_mc, probs = 1 - alpha2)
-
-            # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
       refined_values_mc[linear_indices] <- var_mc
       
+      # Expected Shortfall Histórico
+      if (all(is.na(filtered_data)) || length(filtered_data) == 0) {
+        es_val <- threshold
+      } else {
+        es_val <- mean(filtered_data[filtered_data >= var_hist], na.rm = TRUE)
+      }
       
-      # Expected Shortfall histórico
-      es_val <- mean(filtered_data[filtered_data >= var_hist])
-
-            # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
+      # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
       refined_values_es[linear_indices] <- es_val
       
       

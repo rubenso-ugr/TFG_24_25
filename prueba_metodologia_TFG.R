@@ -8,41 +8,118 @@ library(magrittr)
 
 mis.colores <- colorRampPalette(c("white", "blue", "lightgreen", "yellow", "red"))
 
-N1 <- 200  # filas
-N2 <- 200  # columnas
-n <- 150   # número de realizaciones
+N1 <- 50  # filas
+N2 <- 50  # columnas
+n <- 30   # número de realizaciones
 alpha <- 0.15 # Primer percentil a usar
 alpha2 <- 0.1  #Segundo percentil a usar
 rea_to_show <- 1 #Realización a mostrar
 
+T<-1:3
+
 # Modelo de Simulación
-modelo1 <- RMgencauchy(alpha=2,beta=0.1,var=0.1,scale=1) #Cauchy
+#modelo1 <- RMgencauchy(alpha=2,beta=0.1,var=0.1,scale=1) #Cauchy
 modelo2 <- RMnsst(phi=RMgencauchy(alpha=2,beta=0.1,var=0.1, scale=1),psi=RMstable(alpha=1.9,var=0.1,scale=1), delta=2) #Gneiting
 
 # Definición de la malla de trabajo
 x<-0:(N1-1)
 y<-0:(N2-1)
 
+#------------------------------Simulción condicionada -------------------------------------------
+T<-1:1
+
+model <- RMgencauchy(alpha=2, beta=0.3, scale=0.1, var=0.5)
+
+
+# Datos de ejemplo
+valores <- c(10, 20, 5, 30, 7,21, 32, 5, 28, 8, 10, 20, 5, 30, 7,21, 32, 5, 28, 8)
+coord_x <- c(60, 10, 15, 20, 7, 15, 22, 45, 68, 88, 10, 95, 20, 5, 34, 88, 52, 1, 55, 54)
+coord_y <- c(10, 95, 20, 5, 34, 88, 52, 1, 55, 54, 60, 10, 15, 20, 7, 15, 22, 45, 68, 88)
+
+# Crear el data frame
+data <- data.frame(
+  variable1 = valores,
+  coords.x1 = coord_y,
+  coords.x2 = coord_x,
+  coords.x3 = 1
+)
+
+# Processing grid for RFsimulate function
+giv<-cbind(rep(x,each=length(y)), rep(y,length(x)),  
+           rep(T,each=length(x)*length(y)))
+
+sim<-RFsimulate(model=model,x=giv,data=data,n=n)
+
+#------------------------------------------------------------------------------------------------
+
+
 #Realizamos las simulaciones
-sim<-RFsimulate(model=modelo1, x=x, y=y, T=c(1,1,1), n=n)
+sim<-RFsimulate(model=modelo2, x=x, y=y, T=1:4, n=n)
 
 #Recolección de todos los valores de todas las simulaciones realizadas
-sim_values <- matrix(unlist(sim@data), nrow = N1 * N2, ncol = n)
+sim_values <- matrix(unlist(sim@data), nrow = N1 * N2 * 4, ncol = n)
 
 min_val <- min(sim_values)
 max_val <- max(sim_values)
 max_val_rea <- max(sim_values[, rea_to_show])
 
+
+
+n_times <- 4
+
+# Crear una lista para almacenar las matrices por tiempo
+realizations_by_time <- vector("list", n_times)
+
+# Extraer cada instante temporal para la realización seleccionada
+for (t in 1:n_times) {
+  start_row <- (t - 1) * N1 * N2 + 1
+  end_row <- t * N1 * N2
+  realizations_by_time[[t]] <- matrix(sim_values[start_row:end_row, rea_to_show], nrow = N1, ncol = N2)
+}
+
 #Tomamos la realización escogida
-realization_matrix <- matrix(sim_values[, rea_to_show], nrow = N1, ncol = N2)
+#realization_matrix <- matrix(sim_values[, rea_to_show], nrow = N1, ncol = N2)
 
 # Dibujamos la realización escogida
-filled.contour(x, y, realization_matrix,
+filled.contour(x, y, realizations_by_time[[1]],
                color.palette = mis.colores,
                asp = 1,
                axes = TRUE,
                frame.plot = 0,
-               main = paste("Realización", rea_to_show),
+               main = paste("Instante1 Realización", rea_to_show),
+               xlim =  c(0, N1),
+               ylim =  c(0, N2),
+               zlim = c(min_val, max_val_rea))
+
+# Dibujamos la realización escogida
+filled.contour(x, y, realizations_by_time[[2]],
+               color.palette = mis.colores,
+               asp = 1,
+               axes = TRUE,
+               frame.plot = 0,
+               main = paste("Instante2 Realización", rea_to_show),
+               xlim =  c(0, N1),
+               ylim =  c(0, N2),
+               zlim = c(min_val, max_val_rea))
+
+# Dibujamos la realización escogida
+filled.contour(x, y, realizations_by_time[[3]],
+               color.palette = mis.colores,
+               asp = 1,
+               axes = TRUE,
+               frame.plot = 0,
+               main = paste("Instante3 Realización", rea_to_show),
+               xlim =  c(0, N1),
+               ylim =  c(0, N2),
+               zlim = c(min_val, max_val_rea))
+
+# Dibujamos la realización escogida
+filled.contour(x, y, realizations_by_time[[4]],
+               color.palette = mis.colores,
+               asp = 1,
+               axes = TRUE,
+               frame.plot = 0,
+               main = paste("Instante4 Realización", rea_to_show),
                xlim =  c(0, N1),
                ylim =  c(0, N2),
                zlim = c(min_val, max_val_rea))

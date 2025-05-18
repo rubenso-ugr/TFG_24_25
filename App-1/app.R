@@ -1,30 +1,33 @@
-# Load packages ----------------------------------------------------------------
+# Carga de librerías necesarias ----------------------------------------------------------------
 
 library(shiny)
 library(bslib)
 library(RandomFieldsUtils)
 library(RandomFields)
 library(readr)
-
-
 library(plotly)
 library(magrittr)
 
 source("procesamiento_simulaciones.R")
 
-# Define UI --------------------------------------------------------------------
+
+set.seed(123)
+
+# Defición de la UI --------------------------------------------------------------------
 
 ui <- page_sidebar(
     theme = bs_theme(version = 5, bootswatch = "minty"),
     title = "TFG Estadística espacial",
+    
+    #Panel izquierdo con los diferentes inputs y opciones de atributos
     sidebar = sidebar(
-      numericInput("ancho", "Ancho (pixeles)", value =50, min = 3, max = 5000),
-      numericInput("alto", "Alto (pixeles)", value = 50, min = 3, max = 5000),
+      numericInput("ancho", "Ancho (pixeles)", value =50, min = 3, max = 1000),
+      numericInput("alto", "Alto (pixeles)", value = 50, min = 3, max = 1000),
       numericInput("alpha", "Alpha", value = 2, min = 1e-20, max = 2),
       numericInput("beta", "Beta", value = 0.1, min = 1e-20),
       numericInput("percentil_1", "Primer percentil", value = 0.15, min = 1e-20, max = 1),
       numericInput("percentil_2", "Segundo percentil", value = 0.05, min = 1e-20, max = 1),
-      numericInput("realizaciones", "Realizaciones", value = 30, min = 1, max = 1000),
+      numericInput("realizaciones", "Realizaciones", value = 20, min = 1, max = 500),
       selectInput("modelo", "Elige modelo", choices = c("Cauchy", "Gneiting")),
       numericInput("ventana", "Tamaño ventana", value = 3, min = 2),
       numericInput("solapamiento", "Solapamiento", value = 1, min = 1),
@@ -88,32 +91,40 @@ ui <- page_sidebar(
                 verbatimTextOutput("mensaje_resumen")
                 )
     )
-    
-    
 )
 
 
-# Define server ----------------------------------------------------------------------------------------------------------------
+# Definición del server ----------------------------------------------------------------------------
 
 server <- function(input, output, session) {
   
   ### Manejo de Modales y Formularios Dinámicos ###
   
-  # Muestra el modal para modo 'Simulación Condicionada'
+  # Mostrar el modal para modo 'Simulación Condicionada'
   observeEvent(input$button, {
     
     if (input$modo == "Simulación Condicionada") {
       
+      #Dependiendo del tipo de simulación se establecen unos máximos sobre los atributos ancho, alto y realizaciones
+      if (input$modelo == "Cauchy"){
+        if (!validar_parametro_cer_cer("ancho (píxeles)", input$ancho, 3, 100)) return(NULL)
+        if (!validar_parametro_cer_cer("alto (píxeles)", input$alto, 3, 100)) return(NULL)
+        if (!validar_parametro_cer_cer("realizaciones", input$realizaciones, 1, 50)) return(NULL)
+      }else{
+        if (!validar_parametro_cer_cer("ancho (píxeles)", input$ancho, 3, 50)) return(NULL)
+        if (!validar_parametro_cer_cer("alto (píxeles)", input$alto, 3, 50)) return(NULL)
+        if (!validar_parametro_cer_cer("realizaciones", input$realizaciones, 1, 20)) return(NULL)
+      }
+      
+      #Comprobación de que los valores introducidos en los atributos se encuentran en los límites correctos
       if (!validar_parametro_ab_cer("alpha", input$alpha, 0, 2)) return(NULL)
       if (!validar_parametro_ab_ab("beta", input$beta, 0)) return(NULL)
       if (!validar_parametro_ab_ab("primer percentil", input$percentil_1, 0, 1)) return(NULL)
       if (!validar_parametro_ab_ab("segundo percentil", input$percentil_2, 0, 1)) return(NULL)
-      if (!validar_parametro_cer_cer("ancho (píxeles)", input$ancho, 3, 100)) return(NULL)
-      if (!validar_parametro_cer_cer("alto (píxeles)", input$alto, 3, 100)) return(NULL)
-      if (!validar_parametro_cer_cer("realizaciones", input$realizaciones, 1, 50)) return(NULL)
       if (!validar_parametro_cer_ab("ventana", input$ventana, 2)) return(NULL)
       if (!validar_parametro_cer_ab("solapamiento", input$solapamiento, 1)) return(NULL)
       
+      #Se muestra una ventana para permitir al usuario introducir valores condicionados, ya sea manualmente o mediante un archivo .csv
       showModal(modalDialog(
         title = "Valores condicionales",
         fileInput("file_input", "Sube un archivo CSV", accept =".csv"),
@@ -138,8 +149,8 @@ server <- function(input, output, session) {
       n <- input$n_filas_modal
       formularios <- lapply(1:n, function(i) {
         fluidRow(
-          column(4, numericInput(paste0("fila_", i, "_val1"), "X", value = 0, min = 0, max = input$ancho - 1)),
-          column(4, numericInput(paste0("fila_", i, "_val2"), "Y", value = 0, min = 0, max = input$alto - 1)),
+          column(4, numericInput(paste0("fila_", i, "_val1"), "X", value = 0, min = 0, max = input$ancho)),
+          column(4, numericInput(paste0("fila_", i, "_val2"), "Y", value = 0, min = 0, max = input$alto)),
           column(4, numericInput(paste0("fila_", i, "_val3"), "Valor", value = 0))
         )
       })
@@ -147,8 +158,7 @@ server <- function(input, output, session) {
     })
   })
   
-  # Procesa los datos del formulario al hacer clic en 'Simular'
-  # Cierra el modal después de simular
+  # Procesamiento de los datos del formulario al hacer clic en 'Simular formulario'
   observeEvent(input$calcular_formulario, {
     req(input$n_filas_modal)
     n <- input$n_filas_modal
@@ -159,14 +169,14 @@ server <- function(input, output, session) {
       coords.x3 = rep(1, n)
     )
     
-    set.seed(123)
+    #Se establece el grid de trabajo
     x <- 0:(input$ancho)
     y <- 0:(input$alto)
     
-   
+   #Se realiza la simulación condicionada y se lanzan las diferentes funciones de la metodología con
+   #los datos simulados en función del modelo de simulación escogido
     if (input$modelo == "Cauchy"){
       T<-1:1
-      # Processing grid for RFsimulate function
       giv<-cbind(rep(x,each=length(y)), rep(y,length(x)),  
                  rep(T,each=length(x)*length(y)))
       modelo <- RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1)
@@ -191,12 +201,12 @@ server <- function(input, output, session) {
       modulo_metodologia_temporal(sim_values, x, y, input, output, threshold_temporal)
     }
 
-
+    # Cerrar la ventana emergente después de simular
     removeModal()
   })
   
   
-  
+  # procesamiento de los datos introducidos mediante archivo .csv al hacer clic en 'Procesar archivo'
   observeEvent(input$procesar_archivo, {
     
     req(input$file_input)
@@ -224,14 +234,15 @@ server <- function(input, output, session) {
       coords.x3 = rep(1, nrow(datos))
     )
     
-    set.seed(123)
+    #Se establece el grid de trabajo
     x <- 0:(input$ancho)
     y <- 0:(input$alto)
     
   
+    #Se realiza la simulación condicionada y se lanzan las diferentes funciones de la metodología con 
+    #los datos simulados en función del modelo de simulación escogido
     if (input$modelo == "Cauchy"){
       T<-1:1
-      # Processing grid for RFsimulate function
       giv<-cbind(rep(x,each=length(y)), rep(y,length(x)),  
                  rep(T,each=length(x)*length(y)))
       modelo <- RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1)
@@ -241,7 +252,6 @@ server <- function(input, output, session) {
       modulo_metodologia(sim_values, x, y, input, output, threshold)
     } else {
       T<-1:4
-      # Processing grid for RFsimulate function
       giv<-cbind(rep(x,each=length(y)), rep(y,length(x)),  
                  rep(T,each=length(x)*length(y)))
       modelo <- RMnsst(
@@ -255,8 +265,8 @@ server <- function(input, output, session) {
       
       modulo_metodologia_temporal(sim_values, x, y, input, output, threshold_temporal)
     }
-
-
+    
+    # Cerrar la ventana emergente después de simular
     removeModal()
   })
   
@@ -265,31 +275,31 @@ server <- function(input, output, session) {
   
   observe({
     
-    # Solo continúa si el valor es numérico y no está vacío
+    # Solo se continúa si el valor es numérico y no está vacío
     if (!isTruthy(input$ventana)) return()
     if (!isTruthy(input$ancho)) return()
     if (!isTruthy(input$alto)) return()
     if (!isTruthy(input$solapamiento)) return()
     
-    #Comprobación tamaño de la ventana
+    ## Comprobación dinámica del tamaño de la ventana ##
     
     # Límite superior para la ventana: mínimo entre alto y ancho
     max_ventana <- min(input$ancho, input$alto)
     
-    # Actualiza el input de la ventana
+    # Se actualiza el input de la ventana
     updateNumericInput(session, "ventana", max = max_ventana)
     
-    # Ajusta el valor actual si supera el máximo
+    # Se ajusta el valor actual si supera el máximo
     if (input$ventana >= max_ventana) {
       updateNumericInput(session, "ventana", value = max_ventana)
     }
 
-    # Comprobación del solapamiento
+    ## Comprobación dinámica del solapamiento ##
     
     # Ajusta los límites del input de solapamiento
     updateNumericInput(session, "solapamiento", max = input$ventana, min = 1)
     
-    # Corrige valores fuera de rango
+    # Se corrige los valores fuera de rango
     if (input$solapamiento >= input$ventana) {
       updateNumericInput(session, "solapamiento", value = input$ventana-1)
     } else if (input$solapamiento < 1) {
@@ -298,12 +308,11 @@ server <- function(input, output, session) {
   })
   
 
-  ### Lógica de simulación ###
+  ### Lógica de simulación no condicionada###
   
   observeEvent(input$button, {
-    
-    # Validación de parámetros #
-
+  
+    # Validación de parámetros
     if (!validar_parametro_ab_cer("alpha", input$alpha, 0, 2)) return(NULL)
     if (!validar_parametro_ab_ab("beta", input$beta, 0)) return(NULL)
     if (!validar_parametro_ab_ab("primer percentil", input$percentil_1, 0, 1)) return(NULL)
@@ -314,10 +323,12 @@ server <- function(input, output, session) {
     if (!validar_parametro_cer_ab("ventana", input$ventana, 2)) return(NULL)
     if (!validar_parametro_cer_ab("solapamiento", input$solapamiento, 1)) return(NULL)
 
-    set.seed(123)
+    #Se establece el grid de trabajo
     x <- 0:(input$ancho)
     y <- 0:(input$alto)
     
+    #Se realiza la simulación no condicionada y se lanzan las diferentes funciones de la metodología con 
+    #los datos simulados en función del modelo de simulación escogido
     if (input$modo == "Simulación") {  
       if (input$modelo == "Cauchy"){
         modelo <- RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1)

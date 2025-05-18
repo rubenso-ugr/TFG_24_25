@@ -1,6 +1,8 @@
 mis.colores <- colorRampPalette(c("white", "blue", "lightgreen", "yellow", "red"))
 rea_to_show <- 1 #Realización a mostrar
 n_times <- 4
+n_colors <- 100
+plotly_colors <- mis.colores(n_colors)
 
 modulo_simulacion <- function(sim_values, x, y, input, output) {
 
@@ -9,22 +11,19 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
   ancho <- input$ancho + 1
   percentil_1 <- input$percentil_1
   
-  min_val <- min(sim_values)
-  max_val <- max(sim_values)
-  max_val_rea <- max(sim_values[, rea_to_show])
+  min_val <- min(sim_values) #Valor mínimo de entre todas las simulaciones
+  max_val <- max(sim_values) #Valor máximo de entre todas las simulaciones
+  max_val_rea <- max(sim_values[, rea_to_show]) #Valor máximo de la primera realización o primera simulación
   
   realization_matrix <- matrix(sim_values[, rea_to_show], nrow = ancho, ncol = alto)
   
-  
-  n_colors <- 100
-  plotly_colors <- mis.colores(n_colors)
-  
-  
+  #Ajuste de escala de colores para visualización 3D
   color_scale <- lapply(seq(min_val, max_val, length.out = n_colors), function(val) {
     scaled_val <- (val - min_val) / (max_val - min_val)
     list(scaled_val, plotly_colors[round(scaled_val * (n_colors - 1)) + 1])
   })
   
+  #Comprobación de la opción escogida para mostrar
   output$primera_simulacion <- renderUI({
     if (input$visualizacion_primera_simulacion == "3D") {
       plotlyOutput("primera_plotly", width = "100%", height = "100%")
@@ -34,7 +33,7 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
   })
   
   
-  
+  #Se muestra la primera realización de las diferentes simulaciones realizadas en 2D
   output$primera_ggplot <- renderPlot({
     filled.contour(x, y, realization_matrix,
                    color.palette = mis.colores,
@@ -47,10 +46,11 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
                    zlim = c(min_val, max_val_rea))
   })
   
+  #Se muestra la primera realización de las diferentes simulaciones realizadas en 3D
   output$primera_plotly <- renderPlotly({
 
-    # Renderiza el gráfico 3D
-    plot_ly(z = ~t(realization_matrix)) %>% 
+    # Renderizar el gráfico 3D
+    plot_ly(z = t(realization_matrix), name = "") %>% 
       add_surface(
         colorscale = color_scale,
         contours = list(
@@ -71,25 +71,24 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
       )
   })
   
+  ### Conjunto excursion de la primera realización ###
   
   
-  #------------------------------------------------------------------
-  
-  
-  #Estimamos el umbral de riesgo (percentil 1 - alpha)
+  #Estimación del umbral de riesgo (percentil 1 - alpha)
   all_vals <- as.vector(sim_values)
   threshold <- quantile(all_vals, probs = 1 - percentil_1)
 
   
-  #Obtenemos el conjunto de excursión (asignamos min_val a valores por debajo del umbral en TODAS las realizaciones)
+  #Obtención del conjunto de excursión (asignamos min_val a valores por debajo del umbral en TODAS las realizaciones)
   excursion_values <- sim_values
   excursion_values[sim_values < threshold] <- min_val
   
 
   
-  #Tomamos el conjunto de excursión de la realización escogida
+  #Se obtiene el conjunto de excursión de la realización escogida
   excursion_matrix <- matrix(excursion_values[, rea_to_show], nrow = ancho, ncol = alto)
   
+  #Se muestra el conjunto de excursion de la primera realización
   output$conjunto_excursion <- renderPlot({
     filled.contour(x, y, excursion_matrix,
                    color.palette = mis.colores,
@@ -102,18 +101,15 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
                    zlim = c(min_val, max_val_rea))
   })
   
+  ### Mapa varianzas ###
   
-  
-  
-  #Mapa varianzas --------------------------------------------------------------------
-  
-  # Calculamos la varianza por fila (cada píxel a través de las n simulaciones)
+  # Cálculo de la varianza por filas (cada píxel a través de las n simulaciones)
   varianzas_vector <- apply(sim_values, 1, var)
   
-  # Lo reestructuramos a matriz 200x200
+  # Reestructuración a matriz
   mapa_varianzas <- matrix(varianzas_vector, nrow = alto, ncol = ancho)
   
-  #Dibujamos el mapa de varianas de las simulaciones realizadas
+  #Se muestra el mapa de varianas de las simulaciones realizadas
   output$mapa_varianzas <- renderPlot({
     filled.contour(x, y, mapa_varianzas,
                    color.palette = mis.colores,
@@ -125,7 +121,7 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
                    ylim = c(0, alto))
   })
   
-  #----------------------- Resumen -------------------------------------------------------------
+  ### Resumen ###
   
   output$mensaje_resumen <- renderPrint({
     cat("Min. global:", min_val, "\n")
@@ -134,7 +130,7 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
     cat("Primer Umbral: ", threshold, "\n")
   })
   
-  
+  #Se devuelve el umbral obtenido
   return(threshold)
   
 }
@@ -148,58 +144,53 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
   ancho <- input$ancho +1
   percentil_1 <- input$percentil_1
   
-  # Crear una lista para almacenar las matrices por tiempo
+  # Creación de una lista para almacenar las matrices y diferentes valores por instantes temporales
   realizations_by_time <- vector("list", n_times)
   excursion_by_time <- vector("list", n_times)
   varianza_by_time <- vector("list", n_times)
-  max_val_rea_by_time <- vector("list", n_times)
   threshold_by_time <- vector("list", n_times)
   
-  min_val <- min(sim_values)
-  max_val <- max(sim_values)
+  min_val <- min(sim_values) #Valor mínimo de entre todas las simulaciones de todos los instantes temporales
+  max_val <- max(sim_values) #Valor máximo de entre todas las simulaciones de todos los instantes temporales
   
-  # Extraer cada instante temporal para la realización seleccionada
+  # Extracción de la información de cada instante temporal
   for (t in 1:n_times) {
-    start_row <- (t - 1) * ancho * alto + 1
-    end_row <- t * ancho * alto
     
-    max_val_rea_by_time <- max(sim_values[start_row:end_row, rea_to_show])
+    start_row <- (t - 1) * ancho * alto + 1 #Inicio instante temporal t
+    end_row <- t * ancho * alto             #Fin instante temporal t
     
-    realizations_by_time[[t]] <- matrix(sim_values[start_row:end_row, rea_to_show], nrow = ancho, ncol = alto)
+    realizations_by_time[[t]] <- matrix(sim_values[start_row:end_row, rea_to_show], nrow = ancho, ncol = alto) #Primera realización en el instante temporal t
     
-    
-    
-    #Estimamos el umbral de riesgo (percentil 1 - alpha)
+    #Estimación del umbral de riesgo (percentil 1 - alpha)
     all_vals <- as.vector(sim_values[start_row:end_row,])
     threshold_by_time[[t]] <- quantile(all_vals, probs = 1 - percentil_1)
     
-    
-    
-    #Obtenemos el conjunto de excursión (asignamos min_val a valores por debajo del umbral en TODAS las realizaciones)
+    #Obtención del conjunto de excursión (asignamos min_val a valores por debajo del umbral en TODAS las realizaciones)
     excursion_values <- sim_values[start_row:end_row,]
     excursion_values[sim_values[start_row:end_row,] < threshold_by_time[[t]]] <- min_val
-    
     excursion_by_time[[t]] <- matrix(excursion_values[, rea_to_show], nrow = ancho, ncol = alto)
     
-    
-    # Calculamos la varianza por fila (cada píxel a través de las n simulaciones)
+    # Cálculo de la varianza por fila (cada píxel a través de las n simulaciones)
     varianzas_vector <- apply(sim_values[start_row:end_row,], 1, var)
     
-    # Lo reestructuramos a matriz 200x200
+    # Reestructuración a matriz
     varianza_by_time[[t]] <- matrix(varianzas_vector, nrow = alto, ncol = ancho)
-    
-    
   }
   
-  n_colors <- 100
-  plotly_colors <- mis.colores(n_colors)
+  # Valor máximo de la primera realización en los 4 instantes temporales
+  max_val_rea_by_time <- max(c(realizations_by_time[[1]], 
+                     realizations_by_time[[2]], 
+                     realizations_by_time[[3]], 
+                     realizations_by_time[[4]]), 
+                   na.rm = TRUE)
   
-  
+  #Ajuste de escala de colores para visualización 3D
   color_scale <- lapply(seq(min_val, max_val, length.out = n_colors), function(val) {
     scaled_val <- (val - min_val) / (max_val - min_val)
     list(scaled_val, plotly_colors[round(scaled_val * (n_colors - 1)) + 1])
   })
   
+  #Comprobación de la opción escogida para mostrar
   output$primera_simulacion <- renderUI({
     if (input$visualizacion_primera_simulacion == "3D") {
       plotlyOutput("primera_plotly", width = "100%", height = "100%")
@@ -208,17 +199,15 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
     }
   })
   
-  #-------Primera realizacion
   
+  #Se muestra la primera realización en 2D en función del instante temporal escogido
   output$primera_ggplot <- renderPlot({
-    # Elige la realización basada en el input
     selected_realization <- switch(input$visualizacion_primera_temporal,
                                    "T1" = realizations_by_time[[1]],
                                    "T2" = realizations_by_time[[2]],
                                    "T3" = realizations_by_time[[3]],
                                    "T4" = realizations_by_time[[4]])
     
-    # Genera el gráfico
     filled.contour(x, y, selected_realization,
                    color.palette = mis.colores,
                    asp = 1,
@@ -227,23 +216,20 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
                    main = paste("Tiempo:", input$visualizacion_primera_temporal),
                    xlim = c(0, ancho),
                    ylim = c(0, alto),
-                   zlim = c(min_val, max_val))
+                   zlim = c(min_val, max_val_rea_by_time))
   })
   
-  #-------Primera realizacion 3D
-
-  
+  #Se muestra la primera realización en 3D en función del instante temporal escogido
   output$primera_plotly <- renderPlotly({
     
-    # Elige la realización basada en el input
     selected_realization <- switch(input$visualizacion_primera_temporal,
                                    "T1" = realizations_by_time[[1]],
                                    "T2" = realizations_by_time[[2]],
                                    "T3" = realizations_by_time[[3]],
                                    "T4" = realizations_by_time[[4]])
     
-    # Renderiza el gráfico 3D
-    plot_ly(z = ~t(selected_realization)) %>% 
+    # Renderizar el gráfico 3D
+    plot_ly(z = t(selected_realization), name = "") %>% 
       add_surface(
         colorscale = color_scale,
         contours = list(
@@ -263,11 +249,11 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
         )
       )
   })
- 
-  #-------Conjunto excursion de la primera realizacion
   
+  ### Conjunto excursion de la primera realización ###
+ 
+  #Se muestra el conjunto de excursion de la primera realización en función del instante temporal escogido
   output$conjunto_excursion <- renderPlot({
-    # Elige la varianza basada en el input
     selected_excursion <- switch(input$visualizacion_excursion_temporal,
                                    "T1" = excursion_by_time[[1]],
                                    "T2" = excursion_by_time[[2]],
@@ -284,12 +270,10 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
                    zlim = c(min_val, max_val))
   })
   
+  ### Mapa varianzas ###
 
-  #Mapa varianzas --------------------------------------------------------------------
-  
-  #Dibujamos el mapa de varianas de las simulaciones realizadas
+  #Se muestra el mapa de varianzas en función del instante temporal escogido
   output$mapa_varianzas <- renderPlot({
-    # Elige la varianza basada en el input
     selected_varianza <- switch(input$visualizacion_varianza_temporal,
                                 "T1" = varianza_by_time[[1]],
                                 "T2" = varianza_by_time[[2]],
@@ -306,13 +290,29 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
                    ylim = c(0, alto))
   })
   
+  ### Resumen ###
+  
+  output$mensaje_resumen <- renderPrint({
+    cat("Min. global:", min_val, "\n")
+    cat("Max. global:", max_val, "\n")
+    cat("Max. realizacion mostrada T1:", max_val_rea_by_time[[1]], "\n")
+    cat("Max. realizacion mostrada T2:", max_val_rea_by_time[[2]], "\n")
+    cat("Max. realizacion mostrada T3:", max_val_rea_by_time[[3]], "\n")
+    cat("Max. realizacion mostrada T4:", max_val_rea_by_time[[4]], "\n")
+    cat("Primer Umbral T1: ", threshold_by_time[[1]], "\n")
+    cat("Primer Umbral T2: ", threshold_by_time[[2]], "\n")
+    cat("Primer Umbral T3: ", threshold_by_time[[3]], "\n")
+    cat("Primer Umbral T4: ", threshold_by_time[[4]], "\n")
+  })
+  
+  #Se devuelve los umbrales de todos los intantes
   return(threshold_by_time)
   
 }
 
   
   
-#Metodologia -----------------------------------------------------------------------
+#-------------------------------------- Metodologia -----------------------------------------------------------------------
   
 modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
     
@@ -320,22 +320,22 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
   ancho <- input$ancho +1
   percentil_2 <- input$percentil_2
     
-  # Definimos los parámetros para ventanas deslizantes
+  # Definición de los parámetros para ventanas deslizantes
   window_size <- input$ventana        # tamaño de ventana 
-  overlap <- input$solapamiento            # solapamiento entre ventanas 
+  overlap <- input$solapamiento       # solapamiento entre ventanas 
   step <- window_size - overlap
   
-  # Creamos una matriz para cada medida y metodologia a usar
+  # Creación de una matriz para cada medida y metodologia a usar
   refined_values_hist <- matrix(NA, nrow = ancho, ncol = alto)  # VaR histórico
   refined_values_param <- matrix(NA, nrow = ancho, ncol = alto) # VaR paramétrico
   refined_values_mc <- matrix(NA, nrow = ancho, ncol = alto)    # VaR Monte Carlo
   refined_values_es <- matrix(NA, nrow = ancho, ncol = alto)    # Expected Shortfall
   
-  # Recorremos la malla con ventanas deslizantes
+  # Se recorre la malla mediante ventanas deslizantes
   for (i in seq(1, ancho, by = step)) {
     for (j in seq(1, alto, by = step)) {
       
-      # Ajustamos dinámicamente los tamaños de la ventana en i y j para poder recorrer todos los pixeles
+      # Ajuste dinámico de los tamaños de la ventana en i y j para poder recorrer todos los pixeles
       actual_window_size_i <- min(window_size, ancho - i + 1)
       actual_window_size_j <- min(window_size, alto - j + 1)
       
@@ -343,31 +343,34 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
       indices_i <- i:(i + actual_window_size_i - 1)
       indices_j <- j:(j + actual_window_size_j - 1)
       
-      # Creamos la cuadrícula completa de coordenadas
+      # Creación de la cuadrícula completa de coordenadas
       grid <- expand.grid(i = indices_i, j = indices_j)
       
-      # Convertimos a índices lineales
+      # Conversión a índices lineales
       linear_indices <- (grid$i - 1) * alto + grid$j
       
-      # Extraemos los datos de la ventana (todas las realizaciones)
+      # Extracción de los datos de la ventana (entre todas las realizaciones)
       window_data <- sim_values[linear_indices, , drop = FALSE]
       
+      # Máscara que contiene los valores que superan el umbral
       mask_above_global <- window_data >= threshold
       
-      if (any(mask_above_global)) {   # Comprobamos que haya algun valor que supere el umbral
+      if (any(mask_above_global)) {   # Se comprueba que haya algun valor que supere el umbral
         
-        filtered_data <- window_data[mask_above_global] #Tomamos los valores de la ventana que han superado el primer umbral
+        #Se toma los valores de la ventana que han superado el primer umbral
+        filtered_data <- window_data[mask_above_global] 
         
-        # VaR Histórico
+        ## VaR Histórico ##
         if (all(is.na(filtered_data)) || length(filtered_data) == 0) {
           var_hist <- threshold
         } else {
           var_hist <- quantile(filtered_data, probs = 1 - percentil_2, na.rm = TRUE)
         }
         
+        #Se aplica el valor obtenido a la matriz de valores
         refined_values_hist[linear_indices] <- var_hist
         
-        # VaR Paramétrico
+        ## VaR Paramétrico ##
         if (all(is.na(filtered_data)) || length(filtered_data) == 0) {
           var_param <- threshold
         } else {
@@ -379,7 +382,7 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
         
         refined_values_param[linear_indices] <- var_param
         
-        # VaR Monte Carlo
+        ## VaR Monte Carlo ##
         if (all(is.na(filtered_data)) || length(filtered_data) == 0) {
           var_mc <- threshold
         } else {
@@ -389,14 +392,13 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
         
         refined_values_mc[linear_indices] <- var_mc
         
-        # Expected Shortfall Histórico
+        ## Expected Shortfall Histórico ##
         if (all(is.na(filtered_data)) || length(filtered_data) == 0) {
           es_val <- threshold
         } else {
           es_val <- mean(filtered_data[filtered_data >= var_hist], na.rm = TRUE)
         }
       
-        # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
         refined_values_es[linear_indices] <- es_val
         
       }
@@ -404,7 +406,7 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
   }
   
   
-  #Obtenemos el maximo y el mínimo entre todas las simulaciones para que la comparación de colores sea correcta
+  #Obtenemos el maximo y el mínimo entre todas las simulaciones
   max_z <- max(
     refined_values_hist,
     refined_values_param,
@@ -421,17 +423,14 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
     na.rm = TRUE  # por si acaso hay NA
   )
   
-  
-  n_colors <- 100
-  plotly_colors <- mis.colores(n_colors)
-  
-  
+  #Ajuste de escala de colores para visualización 3D
   color_scale <- lapply(seq(min_z, max_z, length.out = n_colors), function(val) {
     scaled_val <- (val - min_z) / (max_z - min_z)
     list(scaled_val, plotly_colors[round(scaled_val * (n_colors - 1)) + 1])
   })
   
   
+  #Comprobación de la opción escogida para mostrar
   output$metodologia_plot <- renderUI({
     if (input$visualizacion_medida == "3D") {
       plotlyOutput("metodologia_plotly", width = "100%", height = "100%")
@@ -440,8 +439,8 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
     }
   })
   
+  # Visualización del mapa de valores obtenido por la metodología según la medida escogida en 2D
   output$metodologia_ggplot <- renderPlot({
-    # Datos para la visualización 2D
     values_matrix <- switch(input$medida,
                             "VaR Histórico" = refined_values_hist,
                             "VaR Paramétrico" = refined_values_param,
@@ -449,7 +448,6 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
                             "ES" = refined_values_es
     )
     
-    # Renderiza el gráfico 2D
     filled.contour(x, y, values_matrix,
                    color.palette = mis.colores,
                    asp = 1,
@@ -460,8 +458,8 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
                    ylim = c(0, alto))
   })
   
+  # Visualización del mapa de valores obtenido por la metodología según la medida escogida en 3D
   output$metodologia_plotly <- renderPlotly({
-    # Datos para la visualización 3D
     values_matrix <- switch(input$medida,
                             "VaR Histórico" = refined_values_hist,
                             "VaR Paramétrico" = refined_values_param,
@@ -469,8 +467,7 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
                             "ES" = refined_values_es
     )
     
-    # Renderiza el gráfico 3D
-    plot_ly(z = ~t(values_matrix)) %>% 
+    plot_ly(z = t(values_matrix), name = "") %>% 
       add_surface(
         colorscale = color_scale,
         contours = list(
@@ -504,12 +501,12 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
   ancho <- input$ancho +1
   percentil_2 <- input$percentil_2
   
-  # Definimos los parámetros para ventanas deslizantes
+  # Definición de los parámetros para ventanas deslizantes
   window_size <- input$ventana        # tamaño de ventana 
-  overlap <- input$solapamiento            # solapamiento entre ventanas 
+  overlap <- input$solapamiento       # solapamiento entre ventanas 
   step <- window_size - overlap
   
-  # Crear las listas de matrices para cada metodología
+  # Creación de las listas de matrices para cada metodología e instante temporal
   refined_values <- list(
     hist = vector("list", n_times),    # VaR histórico
     param = vector("list", n_times),   # VaR paramétrico
@@ -517,6 +514,7 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
     es = vector("list", n_times)       # Expected Shortfall
   )
   
+  #Creación de las diferentes matrices
   for (method in names(refined_values)) {
     for (t in 1:n_times) {
       refined_values[[method]][[t]] <- matrix(NA, nrow = ancho, ncol = alto)
@@ -524,17 +522,17 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
   }
   
 
-  # Extraer cada instante temporal para la realización seleccionada
+  # Aplicación de la metodología en cada instante temporal
   for (t in 1:n_times) {
     start_row <- (t - 1) * ancho * alto + 1
     end_row <- t * ancho * alto
     valores <- sim_values[start_row:end_row,]
     
-  # Recorremos la malla con ventanas deslizantes
+  # Se recorre la malla con ventanas deslizantes
     for (i in seq(1, ancho, by = step)) {
       for (j in seq(1, alto, by = step)) {
         
-        # Ajustamos dinámicamente los tamaños de la ventana en i y j para poder recorrer todos los pixeles
+        # Ajuste dinámico de los tamaños de la ventana en i y j para poder recorrer todos los pixeles
         actual_window_size_i <- min(window_size, ancho - i + 1)
         actual_window_size_j <- min(window_size, alto - j + 1)
         
@@ -542,34 +540,34 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
         indices_i <- i:(i + actual_window_size_i - 1)
         indices_j <- j:(j + actual_window_size_j - 1)
         
-        # Creamos la cuadrícula completa de coordenadas
+        # Creación de la cuadrícula completa de coordenadas
         grid <- expand.grid(i = indices_i, j = indices_j)
         
-        # Convertimos a índices lineales
+        # Conversión a índices lineales
         linear_indices <- (grid$i - 1) * alto + grid$j
         
-        # Extraemos los datos de la ventana (todas las realizaciones)
+        # Extracción de los datos de la ventana (entre todas las realizaciones)
         window_data <- valores[linear_indices, , drop = FALSE]
         
+        # Máscara que contiene los valores que superan el umbral
         mask_above_global <- window_data >= threshold[[t]]
         
-        if (any(mask_above_global)) {   # Comprobamos que haya algun valor que supere el umbral
+        if (any(mask_above_global)) {   # Se comprueba que haya algun valor que supere el umbral
           
-          filtered_data <- window_data[mask_above_global] #Tomamos los valores de la ventana que han superado el primer umbral
+          #Se toma los valores de la ventana que han superado el primer umbral
+          filtered_data <- window_data[mask_above_global] 
           
-          
-          # VaR Histórico
+          ## VaR Histórico ##
           if (all(is.na(filtered_data)) || length(filtered_data) == 0) {
             var_hist <- threshold[[t]]
           } else {
             var_hist <- quantile(filtered_data, probs = 1 - percentil_2, na.rm = TRUE)
           }
           
+          #Se aplica el valor obtenido a la matriz de valores
           refined_values$hist[[t]][linear_indices] <- var_hist
 
-          
-          
-          # VaR Paramétrico
+          ## VaR Paramétrico ##
           if (all(is.na(filtered_data)) || length(filtered_data) == 0) {
             var_param <- threshold[[t]]
           } else {
@@ -581,7 +579,7 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
           
           refined_values$param[[t]][linear_indices] <- var_param
           
-          # VaR Monte Carlo
+          ## VaR Monte Carlo ##
           if (all(is.na(filtered_data)) || length(filtered_data) == 0) {
             var_mc <- threshold[[t]]
           } else {
@@ -591,14 +589,13 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
           
           refined_values$mc[[t]][linear_indices] <- var_mc
           
-          # Expected Shortfall Histórico
+          ## Expected Shortfall Histórico ##
           if (all(is.na(filtered_data)) || length(filtered_data) == 0) {
             es_val <- threshold[[t]]
           } else {
             es_val <- mean(filtered_data[filtered_data >= var_hist], na.rm = TRUE)
           }
           
-          # Aplicamos el umbral obtenido a los valores de dentro de la ventana de todas las realizaciones que superaron el primer umbral 
           refined_values$es[[t]][linear_indices] <- es_val
           
         }
@@ -607,7 +604,7 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
   }
   
   
-  # Calcula los máximos y mínimos para cada instante temporal en cada metodología
+  #Obtención del maximo y el mínimo entre todas las simulaciones entre todos los instantes temporales
   max_z <- max(
     unlist(lapply(refined_values$hist, max, na.rm = TRUE)),
     unlist(lapply(refined_values$param, max, na.rm = TRUE)),
@@ -624,19 +621,13 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
     na.rm = TRUE
   )
   
-  
-  n_colors <- 100
-  plotly_colors <- mis.colores(n_colors)
-  
-  
+  #Ajuste de escala de colores para visualización 3D
   color_scale <- lapply(seq(min_z, max_z, length.out = n_colors), function(val) {
     scaled_val <- (val - min_z) / (max_z - min_z)
     list(scaled_val, plotly_colors[round(scaled_val * (n_colors - 1)) + 1])
   })
-  
-  
-  
 
+  #Comprobación de la opción escogida para mostrar
   output$metodologia_plot <- renderUI({
     if (input$visualizacion_medida == "3D") {
       plotlyOutput("metodologia_plotly", width = "100%", height = "100%")
@@ -645,6 +636,7 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
     }
   })
   
+  # Visualización del mapa de valores obtenido por la metodología según la medida y el instante temporal escogidos en 2D
   output$metodologia_ggplot <- renderPlot({
     # Selecciona la lista de matrices según la medida de riesgo
     values_matrix_list <- switch(input$medida,
@@ -662,7 +654,6 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
                             "T4" = values_matrix_list[[4]]
     )
     
-    # Renderiza el gráfico 2D
     filled.contour(x, y, values_matrix,
                    color.palette = mis.colores,
                    asp = 1,
@@ -673,6 +664,7 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
                    ylim = c(0, alto))
   })
   
+  # Visualización del mapa de valores obtenido por la metodología según la medida y el instante temporal escogidos en 3D
   output$metodologia_plotly <- renderPlotly({
     # Selecciona la lista de matrices según la medida de riesgo
     values_matrix_list <- switch(input$medida,
@@ -690,9 +682,7 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
                             "T4" = values_matrix_list[[4]]
     )
 
-    
-    # Renderiza el gráfico 3D
-    plot_ly(z = ~t(values_matrix)) %>% 
+    plot_ly(z = t(values_matrix), name = "") %>% 
       add_surface(
         colorscale = color_scale,
         contours = list(
@@ -720,7 +710,7 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
 
 validar_parametro_ab_cer <- function(nombre, valor, min_valor, max_valor) {
   
-  # Verifica que no esté vacío
+  # Verificar que no esté vacío
   if (!isTruthy(valor)) {
     showModal(modalDialog(
       title = paste("Error en parámetro", nombre),
@@ -731,7 +721,7 @@ validar_parametro_ab_cer <- function(nombre, valor, min_valor, max_valor) {
     return(FALSE)
   }
   
-  # Verifica que esté en el rango correcto
+  # Verificar que esté en el rango correcto
   if (valor <= min_valor || valor > max_valor) {
     showModal(modalDialog(
       title = paste("Error en parámetro", nombre),
@@ -747,7 +737,7 @@ validar_parametro_ab_cer <- function(nombre, valor, min_valor, max_valor) {
 
 validar_parametro_ab_ab <- function(nombre, valor, min_valor, max_valor = Inf) {
   
-  # Verifica que no esté vacío
+  # Verificar que no esté vacío
   if (!isTruthy(valor)) {
     showModal(modalDialog(
       title = paste("Error en parámetro", nombre),
@@ -758,7 +748,7 @@ validar_parametro_ab_ab <- function(nombre, valor, min_valor, max_valor = Inf) {
     return(FALSE)
   }
   
-  # Verifica que esté en el rango correcto
+  # Verificar que esté en el rango correcto
   if (valor <= min_valor || valor >= max_valor) {
     showModal(modalDialog(
       title = paste("Error en parámetro", nombre),
@@ -774,7 +764,7 @@ validar_parametro_ab_ab <- function(nombre, valor, min_valor, max_valor = Inf) {
 
 validar_parametro_cer_ab <- function(nombre, valor, min_valor, max_valor = Inf) {
   
-  # Verifica que no esté vacío
+  # Verificar que no esté vacío
   if (!isTruthy(valor)) {
     showModal(modalDialog(
       title = paste("Error en parámetro", nombre),
@@ -785,7 +775,7 @@ validar_parametro_cer_ab <- function(nombre, valor, min_valor, max_valor = Inf) 
     return(FALSE)
   }
   
-  # Verifica que esté en el rango correcto
+  # Verificar que esté en el rango correcto
   if (valor < min_valor || valor >= max_valor) {
     showModal(modalDialog(
       title = paste("Error en parámetro", nombre),
@@ -801,7 +791,7 @@ validar_parametro_cer_ab <- function(nombre, valor, min_valor, max_valor = Inf) 
 
 validar_parametro_cer_cer <- function(nombre, valor, min_valor, max_valor) {
   
-  # Verifica que no esté vacío
+  # Verificar que no esté vacío
   if (!isTruthy(valor)) {
     showModal(modalDialog(
       title = paste("Error en parámetro", nombre),
@@ -812,7 +802,7 @@ validar_parametro_cer_cer <- function(nombre, valor, min_valor, max_valor) {
     return(FALSE)
   }
   
-  # Verifica que esté en el rango correcto
+  # Verificar que esté en el rango correcto
   if (valor < min_valor || valor > max_valor) {
     showModal(modalDialog(
       title = paste("Error en parámetro", nombre),

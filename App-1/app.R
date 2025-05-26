@@ -25,8 +25,8 @@ ui <- page_sidebar(
       numericInput("alto", "Alto (pixeles)", value = 50, min = 3, max = 1000),
       numericInput("alpha", "Alpha", value = 2, min = 1e-20, max = 2),
       numericInput("beta", "Beta", value = 0.1, min = 1e-20),
-      numericInput("percentil_1", "Primer percentil", value = 0.15, min = 1e-20, max = 1),
-      numericInput("percentil_2", "Segundo percentil", value = 0.05, min = 1e-20, max = 1),
+      numericInput("percentil_1", "Umbral de riesgo", value = 0.15, min = 1e-20, max = 1),
+      numericInput("percentil_2", "Nivel de confianza", value = 0.05, min = 1e-20, max = 1),
       numericInput("realizaciones", "Realizaciones", value = 20, min = 1, max = 500),
       selectInput("modelo", "Elige modelo", choices = c("Cauchy", "Gneiting")),
       numericInput("ventana", "Tamaño ventana", value = 3, min = 2),
@@ -48,8 +48,11 @@ ui <- page_sidebar(
                 fluidRow(
                   column(6, selectInput("visualizacion_primera_simulacion", "Visualización", 
                                         choices = c("2D", "3D"))),
-                  column(6, selectInput("visualizacion_primera_temporal", "Instante temporal", 
-                                        choices = c("T1", "T2", "T3", "T4")))
+                  column(6, conditionalPanel(
+                    condition = "output.mostrar_temporal",
+                    selectInput("visualizacion_primera_temporal", "Instante temporal", 
+                                choices = c("T1", "T2", "T3", "T4"))
+                  ))
                 ),
                 div(
                   style = " height: 100%; overflow-y: auto;",
@@ -57,20 +60,34 @@ ui <- page_sidebar(
                 ),
       ),
       nav_panel("Conjunto Excursión",
-                selectInput("visualizacion_excursion_temporal", "Instante temporal", 
-                            choices = c("T1", "T2", "T3", "T4")),
+                fluidRow(
+                  column(6, selectInput("visualizacion_excursion", "Visualización", 
+                                        choices = c("2D", "3D"))),
+                  column(6, conditionalPanel(
+                    condition = "output.mostrar_temporal",
+                    selectInput("visualizacion_excursion_temporal", "Instante temporal", 
+                                choices = c("T1", "T2", "T3", "T4"))
+                  ))
+                ),
                 div(
                   style = " height: 100%; overflow-y: auto;",
-                  plotOutput("conjunto_excursion",  width = "100%", height = "100%"),
+                  uiOutput("conjunto_excursion",  width = "100%", height = "100%"),
                 )),
       nav_panel("Mapa de varianzas",
-                selectInput("visualizacion_varianza_temporal", "Instante temporal", 
-                            choices = c("T1", "T2", "T3", "T4")),
+                fluidRow(
+                  column(6, selectInput("visualizacion_varianza", "Visualización", 
+                                        choices = c("2D", "3D"))),
+                  column(6, conditionalPanel(
+                    condition = "output.mostrar_temporal",
+                    selectInput("visualizacion_varianza_temporal", "Instante temporal", 
+                                choices = c("T1", "T2", "T3", "T4"))
+                  ))
+                ),
                 div(
                   style = " height: 100%; overflow-y: auto;",
-                  plotOutput("mapa_varianzas",  width = "100%", height = "100%")
+                  uiOutput("mapa_varianzas",  width = "100%", height = "100%")
                 )),
-      nav_panel("Metodología aplicada",
+      nav_panel("Mapas de riesgo",
                 fluidRow(
                   column(4,
                          selectInput("medida", "Medida de riesgo a usar", 
@@ -80,8 +97,11 @@ ui <- page_sidebar(
                          selectInput("visualizacion_medida", "Visualización", 
                                      choices = c("2D", "3D"))
                   ),
-                  column(4, selectInput("visualizacion_medida_temporal", "Instante temporal", 
-                                        choices = c("T1", "T2", "T3", "T4")))
+                  column(4, conditionalPanel(
+                    condition = "output.mostrar_temporal",
+                    selectInput("visualizacion_medida_temporal", "Instante temporal", 
+                                choices = c("T1", "T2", "T3", "T4"))
+                  ))
                 ),
                 div(
                   style = " height: 100%; overflow-y: auto;",
@@ -97,6 +117,9 @@ ui <- page_sidebar(
 # Definición del server ----------------------------------------------------------------------------
 
 server <- function(input, output, session) {
+  
+  # 1. Crear la variable reactiva para almacenar el modelo con el que se ejecutó la simulación
+  modelo_ejecutado <- reactiveVal(NULL)
   
   ### Manejo de Modales y Formularios Dinámicos ###
   
@@ -311,6 +334,9 @@ server <- function(input, output, session) {
   ### Lógica de simulación no condicionada###
   
   observeEvent(input$button, {
+    
+    # 2. Al pulsar el botón, guardar el modelo actual como el ejecutado
+    modelo_ejecutado(input$modelo)
   
     # Validación de parámetros
     if (!validar_parametro_ab_cer("alpha", input$alpha, 0, 2)) return(NULL)
@@ -350,7 +376,14 @@ server <- function(input, output, session) {
       }
     }
   })
+  
+  # 3. Crear una salida reactiva para usar en conditionalPanel
+  output$mostrar_temporal <- reactive({
+    modelo_ejecutado() == "Gneiting"
+  })
 
+  # 4. Permitir que Shiny use esa salida en el UI dinámico
+  outputOptions(output, "mostrar_temporal", suspendWhenHidden = FALSE)
   
 }
 

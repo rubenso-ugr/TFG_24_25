@@ -1,5 +1,6 @@
 # Carga de librerías necesarias ----------------------------------------------------------------
 
+
 library(shiny)
 library(bslib)
 library(RandomFieldsUtils)
@@ -10,7 +11,7 @@ library(magrittr)
 
 source("procesamiento_simulaciones.R")
 
-
+options(shiny.useragg = FALSE) #Para que no se muestre rejilla
 set.seed(123)
 
 # Defición de la UI --------------------------------------------------------------------
@@ -28,7 +29,7 @@ ui <- page_sidebar(
       numericInput("percentil_1", "Umbral de riesgo", value = 0.15, min = 1e-20, max = 1),
       numericInput("percentil_2", "Nivel de confianza", value = 0.05, min = 1e-20, max = 1),
       numericInput("realizaciones", "Realizaciones", value = 20, min = 1, max = 500),
-      selectInput("modelo", "Elige modelo", choices = c("Cauchy", "Gneiting")),
+      selectInput("modelo", "Elige modelo", choices = c( "Gneiting", "Cauchy")),
       numericInput("ventana", "Tamaño ventana", value = 3, min = 2),
       numericInput("solapamiento", "Solapamiento", value = 1, min = 1),
       selectInput("modo", "Selecciona el modo:", choices = c("Simulación", "Simulación Condicionada")),
@@ -205,7 +206,7 @@ server <- function(input, output, session) {
       modelo <- RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1)
       sim <- RFsimulate(model = modelo,x=giv,data=data, n = input$realizaciones)
       sim_values <- matrix(unlist(sim@data), nrow = (input$ancho+1) * (input$alto+1), ncol = input$realizaciones)
-      threshold <- modulo_simulacion(sim_values, x, y, input, output)
+      threshold <- modulo_simulacion(sim_values, x, y, input, output, data)
       modulo_metodologia(sim_values, x, y, input, output, threshold)
     } else {
       T<-1:4
@@ -219,7 +220,7 @@ server <- function(input, output, session) {
       )
       sim <- RFsimulate(model = modelo, x=giv,data=data, n = input$realizaciones)
       sim_values <- matrix(unlist(sim@data), nrow = (input$ancho+1) * (input$alto+1) *4, ncol = input$realizaciones)
-      threshold_temporal <- modulo_simulacion_temporal(sim_values, x, y, input, output)
+      threshold_temporal <- modulo_simulacion_temporal(sim_values, x, y, input, output, data)
       
       modulo_metodologia_temporal(sim_values, x, y, input, output, threshold_temporal)
     }
@@ -271,7 +272,7 @@ server <- function(input, output, session) {
       modelo <- RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1)
       sim <- RFsimulate(model = modelo, x=giv,data=data, n = input$realizaciones)
       sim_values <- matrix(unlist(sim@data), nrow = (input$ancho+1) * (input$alto+1), ncol = input$realizaciones)
-      threshold <- modulo_simulacion(sim_values, x, y, input, output)
+      threshold <- modulo_simulacion(sim_values, x, y, input, output, data)
       modulo_metodologia(sim_values, x, y, input, output, threshold)
     } else {
       T<-1:4
@@ -284,7 +285,7 @@ server <- function(input, output, session) {
       )
       sim <- RFsimulate(model = modelo, x=giv,data=data, n = input$realizaciones)
       sim_values <- matrix(unlist(sim@data), nrow = (input$ancho+1) * (input$alto+1) *4, ncol = input$realizaciones)
-      threshold_temporal <- modulo_simulacion_temporal(sim_values, x, y, input, output)
+      threshold_temporal <- modulo_simulacion_temporal(sim_values, x, y, input, output, data)
       
       modulo_metodologia_temporal(sim_values, x, y, input, output, threshold_temporal)
     }

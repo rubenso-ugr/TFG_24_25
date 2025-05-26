@@ -4,9 +4,8 @@ n_times <- 4
 n_colors <- 100
 plotly_colors <- mis.colores(n_colors)
 
-modulo_simulacion <- function(sim_values, x, y, input, output) {
+modulo_simulacion <- function(sim_values, x, y, input, output, condicionado = NULL) {
 
-  
   alto <- input$alto + 1
   ancho <- input$ancho + 1
   percentil_1 <- input$percentil_1
@@ -32,7 +31,11 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
   
   #Se muestra la primera realización de las diferentes simulaciones realizadas en 2D
   output$primera_ggplot <- renderPlot({
-    plot_2d(realization_matrix, x, y, ancho, alto, zlim = c(min_val, max_val_rea))
+    if (is.null(condicionado)){
+      plot_2d(realization_matrix, x, y, ancho, alto, c(min_val, max_val_rea))
+    }else{
+      plot_2d_cond(realization_matrix, x, y, ancho, alto, condicionado)
+    }
   })
   
   #Se muestra la primera realización de las diferentes simulaciones realizadas en 3D
@@ -64,7 +67,11 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
   
   #Se muestra el conjunto de excursion de la primera realización en 2D
   output$excursion_ggplot <- renderPlot({
-    plot_2d(excursion_matrix, x, y, ancho, alto, zlim = c(min_val, max_val_rea))
+    if (is.null(condicionado)){
+      plot_2d(excursion_matrix, x, y, ancho, alto,c(min_val, max_val_rea))
+    }else{
+      plot_2d_cond(excursion_matrix, x, y, ancho, alto, condicionado)
+    }
   })
   
   #Se muestra conjunto de excursion de la primera realización en 3D
@@ -116,7 +123,7 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
 
 #------------------------------------------Simulacion temporal ----------------------------------------
 
-modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
+modulo_simulacion_temporal <- function(sim_values, x, y, input, output, condicionado = NULL) {
   
   alto <- input$alto +1
   ancho <- input$ancho +1
@@ -186,7 +193,12 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
                                    "T3" = realizations_by_time[[3]],
                                    "T4" = realizations_by_time[[4]])
     
-    plot_2d(selected_realization, x, y, ancho, alto, zlim = c(min_val, max_val_rea_time))
+    if (is.null(condicionado) || input$visualizacion_primera_temporal != "T1"){
+      plot_2d(selected_realization, x, y, ancho, alto, c(min_val, max_val_rea_time))
+    }else{
+      plot_2d_cond(selected_realization, x, y, ancho, alto, condicionado)
+    }
+
   })
   
   #Se muestra la primera realización en 3D en función del instante temporal escogido
@@ -220,7 +232,11 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
                                    "T3" = excursion_by_time[[3]],
                                    "T4" = excursion_by_time[[4]])
     
-    plot_2d(selected_excursion, x, y, ancho, alto, zlim = c(min_val, max_val_rea_time))
+    if (is.null(condicionado)){
+      plot_2d(selected_excursion, x, y, ancho, alto, c(min_val, max_val_rea_time))
+    }else{
+      plot_2d_cond(selected_excursion, x, y, ancho, alto, condicionado)
+    }
   })
   
   #Se muestra conjunto de excursion de la primera realización en 3D
@@ -400,7 +416,7 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
   )
   
   #Ajuste de escala de colores para visualización 3D
-  color_scale <- generar_color_scale(min_Z, max_Z, n_colors, plotly_colors)
+  color_scale <- generar_color_scale(min_z, max_z, n_colors, plotly_colors)
   
   #Comprobación de la opción escogida para mostrar
   output$metodologia_plot <- renderUI({
@@ -420,7 +436,7 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
                             "ES" = refined_values_es
     )
     
-    plot_2d(values_matrix, x, y, ancho, alto, zlim = c(min_val, max_val_rea_time))
+    plot_2d(values_matrix, x, y, ancho, alto)
     
   })
   
@@ -569,7 +585,7 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
   )
   
   #Ajuste de escala de colores para visualización 3D
-  color_scale <- generar_color_scale(min_Z, max_Z, n_colors, plotly_colors)
+  color_scale <- generar_color_scale(min_z, max_z, n_colors, plotly_colors)
 
   #Comprobación de la opción escogida para mostrar
   output$metodologia_plot <- renderUI({
@@ -598,7 +614,7 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
                             "T4" = values_matrix_list[[4]]
     )
     
-    plot_2d(values_matrix, x, y, ancho, alto, zlim = c(min_val, max_val_rea_time))
+    plot_2d(values_matrix, x, y, ancho, alto)
   })
   
   # Visualización del mapa de valores obtenido por la metodología según la medida y el instante temporal escogidos en 3D
@@ -749,9 +765,9 @@ plot_2d <- function(mat, x, y, ancho, alto, zlim = NULL) {
     # Sin zlim especificado
     filled.contour(x, y, mat,
                    color.palette = mis.colores,
-                   asp = 1,
-                   axes = TRUE,
-                   frame.plot = 0,
+                   asp =1,
+                   axes =TRUE,
+                   frame.plot=0,
                    xlim = c(0, ancho),
                    ylim = c(0, alto))
   } else {
@@ -765,6 +781,23 @@ plot_2d <- function(mat, x, y, ancho, alto, zlim = NULL) {
                    ylim = c(0, alto),
                    zlim = zlim)
   }
+}
+
+plot_2d_cond <- function(mat, x, y, ancho, alto, condicionado) {
+    filled.contour(x, y, mat,
+                   color.palette = mis.colores,
+                   asp = 1,
+                   axes = TRUE,
+                   frame.plot = 0,
+                   xlim = c(0, ancho),
+                   ylim = c(0, alto),
+                   plot.axes = {
+                     axis(1); axis(2)
+                     points(condicionado$coords.x2, condicionado$coords.x1, 
+                            pch = 10, 
+                            col = "black")
+                   }
+                  )
 }
 
 plot_3d <- function(mat, color_scale) {

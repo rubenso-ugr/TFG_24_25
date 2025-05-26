@@ -22,18 +22,21 @@ ui <- page_sidebar(
     
     #Panel izquierdo con los diferentes inputs y opciones de atributos
     sidebar = sidebar(
-      numericInput("ancho", "Ancho (pixeles)", value =50, min = 3, max = 1000),
-      numericInput("alto", "Alto (pixeles)", value = 50, min = 3, max = 1000),
-      numericInput("alpha", "Alpha", value = 2, min = 1e-20, max = 2),
-      numericInput("beta", "Beta", value = 0.1, min = 1e-20),
-      numericInput("percentil_1", "Umbral de riesgo", value = 0.15, min = 1e-20, max = 1),
-      numericInput("percentil_2", "Nivel de confianza", value = 0.05, min = 1e-20, max = 1),
-      numericInput("realizaciones", "Realizaciones", value = 20, min = 1, max = 500),
+      numericInput("ancho", "Ancho (pixeles)", value =50, min = 3, max = 1000, step = 1),
+      numericInput("alto", "Alto (pixeles)", value = 50, min = 3, max = 1000, step = 1),
+      numericInput("alpha", "Alpha", value = 2, min = 1e-20, max = 2, step = 0.01),
+      numericInput("beta", "Beta", value = 0.1, min = 1e-20, step = 0.01),
+      numericInput("var", "Varianza", value = 0.1, min = 1e-20, step = 0.01),
+      numericInput("scale", "Escala espacial", value = 1, min = 1e-20, step = 0.01),
+      numericInput("percentil_1", "Umbral de riesgo", value = 0.15, min = 1e-20, max = 1,  0.01),
+      numericInput("percentil_2", "Nivel de confianza", value = 0.05, min = 1e-20, max = 1,  0.01),
+      numericInput("realizaciones", "Realizaciones", value = 20, min = 1, max = 500, step = 1),
       selectInput("modelo", "Elige modelo", choices = c( "Gneiting", "Cauchy")),
-      numericInput("ventana", "Tamaño ventana", value = 3, min = 2),
-      numericInput("solapamiento", "Solapamiento", value = 1, min = 1),
+      numericInput("ventana", "Tamaño ventana", value = 3, min = 2, step = 1),
+      numericInput("solapamiento", "Solapamiento", value = 1, min = 1, step = 1),
       selectInput("modo", "Selecciona el modo:", choices = c("Simulación", "Simulación Condicionada")),
       actionButton("button", "Calcular"),
+      actionButton("button_2", "Adjuntar")
     ),
     
     # UI del formulario dinámico
@@ -42,6 +45,7 @@ ui <- page_sidebar(
         condition = "input.modo == 'Simulación Condicionada'",
         uiOutput("formulario_dinamico"),
       )),
+
     
     # Panel derecho con pestañas
     navset_card_underline(
@@ -203,7 +207,7 @@ server <- function(input, output, session) {
       T<-1:1
       giv<-cbind(rep(x,each=length(y)), rep(y,length(x)),  
                  rep(T,each=length(x)*length(y)))
-      modelo <- RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1)
+      modelo <- RMgencauchy(alpha = input$alpha, beta = input$beta, var = input$var, scale = input$scale)
       sim <- RFsimulate(model = modelo,x=giv,data=data, n = input$realizaciones)
       sim_values <- matrix(unlist(sim@data), nrow = (input$ancho+1) * (input$alto+1), ncol = input$realizaciones)
       threshold <- modulo_simulacion(sim_values, x, y, input, output, data)
@@ -214,14 +218,13 @@ server <- function(input, output, session) {
       giv<-cbind(rep(x,each=length(y)), rep(y,length(x)),  
                  rep(T,each=length(x)*length(y)))
       modelo <- RMnsst(
-        phi = RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1),
-        psi = RMstable(alpha = input$alpha, var = 0.1, scale = 1),
+        phi = RMgencauchy(alpha = input$alpha, beta = input$beta, var = input$var, scale = input$scale),
+        psi = RMstable(alpha = input$alpha, var = input$var, scale = input$scale),
         delta = 2
       )
       sim <- RFsimulate(model = modelo, x=giv,data=data, n = input$realizaciones)
       sim_values <- matrix(unlist(sim@data), nrow = (input$ancho+1) * (input$alto+1) *4, ncol = input$realizaciones)
       threshold_temporal <- modulo_simulacion_temporal(sim_values, x, y, input, output, data)
-      
       modulo_metodologia_temporal(sim_values, x, y, input, output, threshold_temporal)
     }
 
@@ -269,7 +272,7 @@ server <- function(input, output, session) {
       T<-1:1
       giv<-cbind(rep(x,each=length(y)), rep(y,length(x)),  
                  rep(T,each=length(x)*length(y)))
-      modelo <- RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1)
+      modelo <- RMgencauchy(alpha = input$alpha, beta = input$beta, var = input$var, scale = input$scale)
       sim <- RFsimulate(model = modelo, x=giv,data=data, n = input$realizaciones)
       sim_values <- matrix(unlist(sim@data), nrow = (input$ancho+1) * (input$alto+1), ncol = input$realizaciones)
       threshold <- modulo_simulacion(sim_values, x, y, input, output, data)
@@ -279,8 +282,8 @@ server <- function(input, output, session) {
       giv<-cbind(rep(x,each=length(y)), rep(y,length(x)),  
                  rep(T,each=length(x)*length(y)))
       modelo <- RMnsst(
-        phi = RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1),
-        psi = RMstable(alpha = input$alpha, var = 0.1, scale = 1),
+        phi = RMgencauchy(alpha = input$alpha, beta = input$beta, var = input$var, scale = input$scale),
+        psi = RMstable(alpha = input$alpha, var = input$var, scale = input$scale),
         delta = 2
       )
       sim <- RFsimulate(model = modelo, x=giv,data=data, n = input$realizaciones)
@@ -358,19 +361,21 @@ server <- function(input, output, session) {
     #los datos simulados en función del modelo de simulación escogido
     if (input$modo == "Simulación") {  
       if (input$modelo == "Cauchy"){
-        modelo <- RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1)
+        modelo <- RMgencauchy(alpha = input$alpha, beta = input$beta, var = input$var, scale = input$scale)
         sim <- RFsimulate(model = modelo, x = x, y = y, T = c(1, 1, 1), n = input$realizaciones)
         sim_values <- matrix(unlist(sim@data), nrow = (input$ancho+1) * (input$alto+1), ncol = input$realizaciones)
+        #write.csv(as.data.frame(sim_values), "cauchy.csv", row.names = FALSE)
         threshold <- modulo_simulacion(sim_values, x, y, input, output)
         modulo_metodologia(sim_values, x, y, input, output, threshold)
       } else {
         modelo <- RMnsst(
-          phi = RMgencauchy(alpha = input$alpha, beta = input$beta, var = 0.1, scale = 1),
-          psi = RMstable(alpha = input$alpha, var = 0.1, scale = 1),
+          phi = RMgencauchy(alpha = input$alpha, beta = input$beta, var = input$var, scale = input$scale),
+          psi = RMstable(alpha = input$alpha, var = input$var, scale = input$scale),
           delta = 2
         )
         sim <- RFsimulate(model = modelo, x = x, y = y, T = 1:4, n = input$realizaciones)
         sim_values <- matrix(unlist(sim@data), nrow = (input$ancho+1) * (input$alto+1) *4, ncol = input$realizaciones)
+        #write.csv(as.data.frame(sim_values), "gneiting.csv", row.names = FALSE)
         threshold_temporal <- modulo_simulacion_temporal(sim_values, x, y, input, output)
         
         modulo_metodologia_temporal(sim_values, x, y, input, output, threshold_temporal)
@@ -385,6 +390,148 @@ server <- function(input, output, session) {
 
   # 4. Permitir que Shiny use esa salida en el UI dinámico
   outputOptions(output, "mostrar_temporal", suspendWhenHidden = FALSE)
+  
+  
+  
+  observeEvent(input$button_2, {
+    modelo_ejecutado(input$modelo)
+    showModal(
+      modalDialog(
+        title = "Adjuntar Datos",
+        fileInput("archivo", "Selecciona un archivo:"),
+        
+        # Input adicional solo en modo 'Simulación Condicionada'
+        conditionalPanel(
+          condition = "input.modo == 'Simulación Condicionada'",
+          fileInput("archivo_datos_condicionados", "Selecciona un archivo con datos condicionados:")
+        ),
+        
+        # Botón para modo 'Simulación'
+        conditionalPanel(
+          condition = "input.modo == 'Simulación'",
+          actionButton("confirmar_adjunto_simulacion", "Cargar (Simulación)")
+        ),
+        
+        # Botón para modo 'Simulación Condicionada'
+        conditionalPanel(
+          condition = "input.modo == 'Simulación Condicionada'",
+          actionButton("confirmar_adjunto_condicionada", "Cargar (Condicionada)")
+        ),
+        
+        easyClose = TRUE,
+        footer = NULL
+      )
+    )
+  })
+  
+  observeEvent(input$confirmar_adjunto_simulacion, {
+
+    req(input$archivo)
+    
+    # Leer el archivo tal cual, sin cabecera
+    sim_values <- as.matrix(readr::read_csv(input$archivo$datapath, col_names = TRUE, show_col_types = FALSE))
+    
+    # Validación de dimensiones 
+    
+    if (input$modelo == "Cauchy"){
+      filas_esperadas <- (input$ancho + 1) * (input$alto + 1)
+    }else{
+      filas_esperadas <- (input$ancho + 1) * (input$alto + 1) * 4
+    }
+    columnas_esperadas <- input$realizaciones
+    
+    if (!all(dim(sim_values) == c(filas_esperadas, columnas_esperadas))) {
+      showModal(modalDialog(
+        title = "Error en la matriz",
+        paste0("La matriz debe tener ", filas_esperadas, " filas y ", columnas_esperadas, " columnas.\n",
+               "Pero el archivo tiene ", nrow(sim_values), " filas y ", ncol(sim_values), " columnas."),
+        easyClose = TRUE,
+        footer = NULL
+      ))
+      return(NULL)
+    }
+    
+    #Se establece el grid de trabajo
+    x <- 0:(input$ancho)
+    y <- 0:(input$alto)
+    
+    if (input$modelo == "Cauchy"){
+        threshold <- modulo_simulacion(sim_values, x, y, input, output)
+        modulo_metodologia(sim_values, x, y, input, output, threshold)
+    }else{
+        threshold <- modulo_simulacion_temporal(sim_values, x, y, input, output)
+        modulo_metodologia_temporal(sim_values, x, y, input, output, threshold)
+    }
+    
+    removeModal()
+  }
+  )
+  
+  observeEvent(input$confirmar_adjunto_condicionada, {
+    
+    req(input$archivo)
+    req(input$archivo_datos_condicionados)
+    
+    # Leer el archivo tal cual, sin cabecera
+    sim_values <- as.matrix(readr::read_csv(input$archivo$datapath, col_names = TRUE, show_col_types = FALSE))
+    
+    # Leer el archivo CSV
+    datos <- read_csv(input$archivo_datos_condicionados$datapath)
+    
+    # Verificación de columnas esperadas
+    if (!all(c("x", "y", "valor") %in% names(datos))) {
+      showModal(modalDialog(
+        title = "Error en el archivo",
+        "El archivo debe contener las columnas 'x', 'y' y 'valor'.",
+        easyClose = TRUE,
+        footer = NULL
+      ))
+      return(NULL)
+    }
+    
+    # Formato del data frame esperado
+    data <- data.frame(
+      variable1 = datos$valor,
+      coords.x1 = datos$y,
+      coords.x2 = datos$x,
+    )
+    
+    
+    
+    # Validación de dimensiones 
+    
+    if (input$modelo == "Cauchy"){
+      filas_esperadas <- (input$ancho + 1) * (input$alto + 1)
+    }else{
+      filas_esperadas <- (input$ancho + 1) * (input$alto + 1) * 4
+    }
+    columnas_esperadas <- input$realizaciones
+    
+    if (!all(dim(sim_values) == c(filas_esperadas, columnas_esperadas))) {
+      showModal(modalDialog(
+        title = "Error en la matriz",
+        paste0("La matriz debe tener ", filas_esperadas, " filas y ", columnas_esperadas, " columnas.\n",
+               "Pero el archivo tiene ", nrow(sim_values), " filas y ", ncol(sim_values), " columnas."),
+        easyClose = TRUE,
+        footer = NULL
+      ))
+      return(NULL)
+    }
+    
+    #Se establece el grid de trabajo
+    x <- 0:(input$ancho)
+    y <- 0:(input$alto)
+    
+    if (input$modelo == "Cauchy"){
+      threshold <- modulo_simulacion(sim_values, x, y, input, output, data)
+      modulo_metodologia(sim_values, x, y, input, output, threshold) 
+    }else{
+      threshold <- modulo_simulacion_temporal(sim_values, x, y, input, output, data)
+      modulo_metodologia_temporal(sim_values, x, y, input, output, threshold) 
+    }
+    
+    removeModal()
+  })
   
 }
 

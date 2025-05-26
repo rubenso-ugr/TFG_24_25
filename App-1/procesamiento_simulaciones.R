@@ -18,10 +18,7 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
   realization_matrix <- matrix(sim_values[, rea_to_show], nrow = ancho, ncol = alto)
   
   #Ajuste de escala de colores para visualización 3D
-  color_scale <- lapply(seq(min_val, max_val, length.out = n_colors), function(val) {
-    scaled_val <- (val - min_val) / (max_val - min_val)
-    list(scaled_val, plotly_colors[round(scaled_val * (n_colors - 1)) + 1])
-  })
+  color_scale <- generar_color_scale(min_val, max_val, n_colors, plotly_colors)
   
   #Comprobación de la opción escogida para mostrar
   output$primera_simulacion <- renderUI({
@@ -35,70 +32,44 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
   
   #Se muestra la primera realización de las diferentes simulaciones realizadas en 2D
   output$primera_ggplot <- renderPlot({
-    filled.contour(x, y, realization_matrix,
-                   color.palette = mis.colores,
-                   asp = 1,
-                   axes = TRUE,
-                   frame.plot = 0,
-                   main = paste("Realización", rea_to_show),
-                   xlim =  c(0, ancho),
-                   ylim =  c(0, alto),
-                   zlim = c(min_val, max_val_rea))
+    plot_2d(realization_matrix, x, y, ancho, alto, zlim = c(min_val, max_val_rea))
   })
   
   #Se muestra la primera realización de las diferentes simulaciones realizadas en 3D
   output$primera_plotly <- renderPlotly({
-
-    # Renderizar el gráfico 3D
-    plot_ly(z = t(realization_matrix), name = "") %>% 
-      add_surface(
-        colorscale = color_scale,
-        contours = list(
-          z = list(
-            show = TRUE,
-            usecolormap = TRUE,
-            highlightcolor = "white",
-            project = list(z = TRUE)
-          )
-        )
-      ) %>%
-      layout(
-        scene = list(
-          xaxis = list(title = "X"),
-          yaxis = list(title = "Y"),
-          zaxis = list(title = "Valor")
-        )
-      )
+    plot_3d(realization_matrix, color_scale)
   })
   
   ### Conjunto excursion de la primera realización ###
   
-  
   #Estimación del umbral de riesgo (percentil 1 - alpha)
   all_vals <- as.vector(sim_values)
   threshold <- quantile(all_vals, probs = 1 - percentil_1)
-
   
   #Obtención del conjunto de excursión (asignamos min_val a valores por debajo del umbral en TODAS las realizaciones)
   excursion_values <- sim_values
   excursion_values[sim_values < threshold] <- min_val
   
-
-  
   #Se obtiene el conjunto de excursión de la realización escogida
   excursion_matrix <- matrix(excursion_values[, rea_to_show], nrow = ancho, ncol = alto)
   
-  #Se muestra el conjunto de excursion de la primera realización
-  output$conjunto_excursion <- renderPlot({
-    filled.contour(x, y, excursion_matrix,
-                   color.palette = mis.colores,
-                   asp = 1,
-                   axes = TRUE,
-                   frame.plot = 0,
-                   main = paste("Conjunto de Excursión (Realización", rea_to_show, ")"),
-                   xlim =  c(0, ancho),
-                   ylim =  c(0, alto),
-                   zlim = c(min_val, max_val_rea))
+  #Comprobación de la opción escogida para mostrar
+  output$conjunto_excursion <- renderUI({
+    if (input$visualizacion_excursion == "3D") {
+      plotlyOutput("excursion_plotly", width = "100%", height = "100%")
+    } else {
+      plotOutput("excursion_ggplot", width = "100%", height = "100%")
+    }
+  })
+  
+  #Se muestra el conjunto de excursion de la primera realización en 2D
+  output$excursion_ggplot <- renderPlot({
+    plot_2d(excursion_matrix, x, y, ancho, alto, zlim = c(min_val, max_val_rea))
+  })
+  
+  #Se muestra conjunto de excursion de la primera realización en 3D
+  output$excursion_plotly <- renderPlotly({
+    plot_3d(excursion_matrix, color_scale)
   })
   
   ### Mapa varianzas ###
@@ -109,16 +80,24 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
   # Reestructuración a matriz
   mapa_varianzas <- matrix(varianzas_vector, nrow = alto, ncol = ancho)
   
-  #Se muestra el mapa de varianas de las simulaciones realizadas
-  output$mapa_varianzas <- renderPlot({
-    filled.contour(x, y, mapa_varianzas,
-                   color.palette = mis.colores,
-                   asp = 1,
-                   axes = TRUE,
-                   frame.plot = 0,
-                   main = paste("Mapa de varianzas"),
-                   xlim = c(0, ancho),
-                   ylim = c(0, alto))
+  #Comprobación de la opción escogida para mostrar
+  output$mapa_varianzas <- renderUI({
+    if (input$visualizacion_varianza == "3D") {
+      plotlyOutput("varianzas_plotly", width = "100%", height = "100%")
+    } else {
+      plotOutput("varianzas_ggplot", width = "100%", height = "100%")
+    }
+  })
+  
+  
+  #Se muestra el mapa de varianas de las simulaciones realizadas en 2D
+  output$varianzas_ggplot <- renderPlot({
+    plot_2d(mapa_varianzas, x, y, ancho, alto)
+  })
+  
+  #Se muestra conjunto de excursion de la primera realización en 3D
+  output$varianzas_plotly <- renderPlotly({
+    plot_3d(mapa_varianzas, color_scale)
   })
   
   ### Resumen ###
@@ -127,7 +106,7 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
     cat("Min. global:", min_val, "\n")
     cat("Max. global:", max_val, "\n")
     cat("Max. realizacion mostrada:", max_val_rea, "\n")
-    cat("Primer Umbral: ", threshold, "\n")
+    cat("Primer umbral de riesgo: ", threshold, "\n")
   })
   
   #Se devuelve el umbral obtenido
@@ -136,7 +115,6 @@ modulo_simulacion <- function(sim_values, x, y, input, output) {
 }
 
 #------------------------------------------Simulacion temporal ----------------------------------------
-
 
 modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
   
@@ -149,6 +127,7 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
   excursion_by_time <- vector("list", n_times)
   varianza_by_time <- vector("list", n_times)
   threshold_by_time <- vector("list", n_times)
+  max_val_rea_by_time <- vector("list", n_times)
   
   min_val <- min(sim_values) #Valor mínimo de entre todas las simulaciones de todos los instantes temporales
   max_val <- max(sim_values) #Valor máximo de entre todas las simulaciones de todos los instantes temporales
@@ -160,6 +139,8 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
     end_row <- t * ancho * alto             #Fin instante temporal t
     
     realizations_by_time[[t]] <- matrix(sim_values[start_row:end_row, rea_to_show], nrow = ancho, ncol = alto) #Primera realización en el instante temporal t
+    
+    max_val_rea_by_time[[t]] <- max(realizations_by_time[[t]])
     
     #Estimación del umbral de riesgo (percentil 1 - alpha)
     all_vals <- as.vector(sim_values[start_row:end_row,])
@@ -178,17 +159,14 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
   }
   
   # Valor máximo de la primera realización en los 4 instantes temporales
-  max_val_rea_by_time <- max(c(realizations_by_time[[1]], 
+  max_val_rea_time <- max(c(realizations_by_time[[1]], 
                      realizations_by_time[[2]], 
                      realizations_by_time[[3]], 
                      realizations_by_time[[4]]), 
                    na.rm = TRUE)
   
   #Ajuste de escala de colores para visualización 3D
-  color_scale <- lapply(seq(min_val, max_val, length.out = n_colors), function(val) {
-    scaled_val <- (val - min_val) / (max_val - min_val)
-    list(scaled_val, plotly_colors[round(scaled_val * (n_colors - 1)) + 1])
-  })
+  color_scale <- generar_color_scale(min_val, max_val, n_colors, plotly_colors)
   
   #Comprobación de la opción escogida para mostrar
   output$primera_simulacion <- renderUI({
@@ -208,15 +186,7 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
                                    "T3" = realizations_by_time[[3]],
                                    "T4" = realizations_by_time[[4]])
     
-    filled.contour(x, y, selected_realization,
-                   color.palette = mis.colores,
-                   asp = 1,
-                   axes = TRUE,
-                   frame.plot = 0,
-                   main = paste("Tiempo:", input$visualizacion_primera_temporal),
-                   xlim = c(0, ancho),
-                   ylim = c(0, alto),
-                   zlim = c(min_val, max_val_rea_by_time))
+    plot_2d(selected_realization, x, y, ancho, alto, zlim = c(min_val, max_val_rea_time))
   })
   
   #Se muestra la primera realización en 3D en función del instante temporal escogido
@@ -228,66 +198,75 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
                                    "T3" = realizations_by_time[[3]],
                                    "T4" = realizations_by_time[[4]])
     
-    # Renderizar el gráfico 3D
-    plot_ly(z = t(selected_realization), name = "") %>% 
-      add_surface(
-        colorscale = color_scale,
-        contours = list(
-          z = list(
-            show = TRUE,
-            usecolormap = TRUE,
-            highlightcolor = "white",
-            project = list(z = TRUE)
-          )
-        )
-      ) %>%
-      layout(
-        scene = list(
-          xaxis = list(title = "X"),
-          yaxis = list(title = "Y"),
-          zaxis = list(title = "Valor")
-        )
-      )
+    plot_3d(selected_realization, color_scale)
   })
   
   ### Conjunto excursion de la primera realización ###
+  
+  #Comprobación de la opción escogida para mostrar
+  output$conjunto_excursion <- renderUI({
+    if (input$visualizacion_excursion == "3D") {
+      plotlyOutput("excursion_plotly", width = "100%", height = "100%")
+    } else {
+      plotOutput("excursion_ggplot", width = "100%", height = "100%")
+    }
+  })
  
-  #Se muestra el conjunto de excursion de la primera realización en función del instante temporal escogido
-  output$conjunto_excursion <- renderPlot({
+  #Se muestra el conjunto de excursion de la primera realización en función del instante temporal escogido en 2D
+  output$excursion_ggplot <- renderPlot({
     selected_excursion <- switch(input$visualizacion_excursion_temporal,
                                    "T1" = excursion_by_time[[1]],
                                    "T2" = excursion_by_time[[2]],
                                    "T3" = excursion_by_time[[3]],
                                    "T4" = excursion_by_time[[4]])
-    filled.contour(x, y, selected_excursion,
-                   color.palette = mis.colores,
-                   asp = 1,
-                   axes = TRUE,
-                   frame.plot = 0,
-                   main = paste("Conjunto de Excursión (Realización", rea_to_show, "):", input$visualizacion_excursion_temporal),
-                   xlim =  c(0, ancho),
-                   ylim =  c(0, alto),
-                   zlim = c(min_val, max_val))
+    
+    plot_2d(selected_excursion, x, y, ancho, alto, zlim = c(min_val, max_val_rea_time))
+  })
+  
+  #Se muestra conjunto de excursion de la primera realización en 3D
+  output$excursion_plotly <- renderPlotly({
+    
+    selected_excursion <- switch(input$visualizacion_excursion_temporal,
+                                "T1" = excursion_by_time[[1]],
+                                "T2" = excursion_by_time[[2]],
+                                "T3" = excursion_by_time[[3]],
+                                "T4" = excursion_by_time[[4]])
+    
+    plot_3d(selected_excursion, color_scale)
   })
   
   ### Mapa varianzas ###
 
+  #Comprobación de la opción escogida para mostrar
+  output$mapa_varianzas <- renderUI({
+    if (input$visualizacion_varianza == "3D") {
+      plotlyOutput("varianzas_plotly", width = "100%", height = "100%")
+    } else {
+      plotOutput("varianzas_ggplot", width = "100%", height = "100%")
+    }
+  })
+  
   #Se muestra el mapa de varianzas en función del instante temporal escogido
-  output$mapa_varianzas <- renderPlot({
+  output$varianzas_ggplot <- renderPlot({
     selected_varianza <- switch(input$visualizacion_varianza_temporal,
                                 "T1" = varianza_by_time[[1]],
                                 "T2" = varianza_by_time[[2]],
                                 "T3" = varianza_by_time[[3]],
                                 "T4" = varianza_by_time[[4]])
     
-    filled.contour(x, y, selected_varianza,
-                   color.palette = mis.colores,
-                   asp = 1,
-                   axes = TRUE,
-                   frame.plot = 0,
-                   main = paste("Mapa de varianzas:", input$visualizacion_varianza_temporal),
-                   xlim = c(0, ancho),
-                   ylim = c(0, alto))
+    plot_2d(selected_varianza, x, y, ancho, alto)
+  })
+  
+  #Se muestra conjunto de excursion de la primera realización en 3D
+  output$varianzas_plotly <- renderPlotly({
+    
+    selected_varianza <- switch(input$visualizacion_varianza_temporal,
+                                "T1" = varianza_by_time[[1]],
+                                "T2" = varianza_by_time[[2]],
+                                "T3" = varianza_by_time[[3]],
+                                "T4" = varianza_by_time[[4]])
+    
+    plot_3d(selected_varianza, color_scale)
   })
   
   ### Resumen ###
@@ -299,18 +278,16 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output) {
     cat("Max. realizacion mostrada T2:", max_val_rea_by_time[[2]], "\n")
     cat("Max. realizacion mostrada T3:", max_val_rea_by_time[[3]], "\n")
     cat("Max. realizacion mostrada T4:", max_val_rea_by_time[[4]], "\n")
-    cat("Primer Umbral T1: ", threshold_by_time[[1]], "\n")
-    cat("Primer Umbral T2: ", threshold_by_time[[2]], "\n")
-    cat("Primer Umbral T3: ", threshold_by_time[[3]], "\n")
-    cat("Primer Umbral T4: ", threshold_by_time[[4]], "\n")
+    cat("Primer umbral de riesgo T1: ", threshold_by_time[[1]], "\n")
+    cat("Primer umbral de riesgo T2: ", threshold_by_time[[2]], "\n")
+    cat("Primer umbral de riesgo T3: ", threshold_by_time[[3]], "\n")
+    cat("Primer umbral de riesgo T4: ", threshold_by_time[[4]], "\n")
   })
   
   #Se devuelve los umbrales de todos los intantes
   return(threshold_by_time)
   
 }
-
-  
   
 #-------------------------------------- Metodologia -----------------------------------------------------------------------
   
@@ -405,7 +382,6 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
     }
   }
   
-  
   #Obtenemos el maximo y el mínimo entre todas las simulaciones
   max_z <- max(
     refined_values_hist,
@@ -424,11 +400,7 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
   )
   
   #Ajuste de escala de colores para visualización 3D
-  color_scale <- lapply(seq(min_z, max_z, length.out = n_colors), function(val) {
-    scaled_val <- (val - min_z) / (max_z - min_z)
-    list(scaled_val, plotly_colors[round(scaled_val * (n_colors - 1)) + 1])
-  })
-  
+  color_scale <- generar_color_scale(min_Z, max_Z, n_colors, plotly_colors)
   
   #Comprobación de la opción escogida para mostrar
   output$metodologia_plot <- renderUI({
@@ -448,14 +420,8 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
                             "ES" = refined_values_es
     )
     
-    filled.contour(x, y, values_matrix,
-                   color.palette = mis.colores,
-                   asp = 1,
-                   axes = TRUE,
-                   frame.plot = 0,
-                   main = sprintf("%s %.0f%%", input$medida, (1 - percentil_2) * 100),
-                   xlim = c(0, ancho),
-                   ylim = c(0, alto))
+    plot_2d(values_matrix, x, y, ancho, alto, zlim = c(min_val, max_val_rea_time))
+    
   })
   
   # Visualización del mapa de valores obtenido por la metodología según la medida escogida en 3D
@@ -466,26 +432,7 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
                             "VaR Montecarlo" = refined_values_mc,
                             "ES" = refined_values_es
     )
-    
-    plot_ly(z = t(values_matrix), name = "") %>% 
-      add_surface(
-        colorscale = color_scale,
-        contours = list(
-          z = list(
-            show = TRUE,
-            usecolormap = TRUE,
-            highlightcolor = "white",
-            project = list(z = TRUE)
-          )
-        )
-      ) %>%
-      layout(
-        scene = list(
-          xaxis = list(title = "X"),
-          yaxis = list(title = "Y"),
-          zaxis = list(title = "Valor")
-        )
-      )
+    plot_3d(values_matrix, color_scale)
   })
  
 }
@@ -622,10 +569,7 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
   )
   
   #Ajuste de escala de colores para visualización 3D
-  color_scale <- lapply(seq(min_z, max_z, length.out = n_colors), function(val) {
-    scaled_val <- (val - min_z) / (max_z - min_z)
-    list(scaled_val, plotly_colors[round(scaled_val * (n_colors - 1)) + 1])
-  })
+  color_scale <- generar_color_scale(min_Z, max_Z, n_colors, plotly_colors)
 
   #Comprobación de la opción escogida para mostrar
   output$metodologia_plot <- renderUI({
@@ -654,14 +598,7 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
                             "T4" = values_matrix_list[[4]]
     )
     
-    filled.contour(x, y, values_matrix,
-                   color.palette = mis.colores,
-                   asp = 1,
-                   axes = TRUE,
-                   frame.plot = 0,
-                   main = sprintf("%s %.0f%%", input$medida, (1 - percentil_2) * 100),
-                   xlim = c(0, ancho),
-                   ylim = c(0, alto))
+    plot_2d(values_matrix, x, y, ancho, alto, zlim = c(min_val, max_val_rea_time))
   })
   
   # Visualización del mapa de valores obtenido por la metodología según la medida y el instante temporal escogidos en 3D
@@ -682,25 +619,8 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
                             "T4" = values_matrix_list[[4]]
     )
 
-    plot_ly(z = t(values_matrix), name = "") %>% 
-      add_surface(
-        colorscale = color_scale,
-        contours = list(
-          z = list(
-            show = TRUE,
-            usecolormap = TRUE,
-            highlightcolor = "white",
-            project = list(z = TRUE)
-          )
-        )
-      ) %>%
-      layout(
-        scene = list(
-          xaxis = list(title = "X"),
-          yaxis = list(title = "Y"),
-          zaxis = list(title = "Valor")
-        )
-      )
+    plot_3d(values_matrix, color_scale)
+
   })
   
 }
@@ -814,6 +734,59 @@ validar_parametro_cer_cer <- function(nombre, valor, min_valor, max_valor) {
   }
   
   return(TRUE)
+}
+
+
+generar_color_scale <- function(min_val, max_val, n_colors, colores) {
+  lapply(seq(min_val, max_val, length.out = n_colors), function(val) {
+    scaled_val <- (val - min_val) / (max_val - min_val)
+    list(scaled_val, colores[round(scaled_val * (n_colors - 1)) + 1])
+  })
+}
+
+plot_2d <- function(mat, x, y, ancho, alto, zlim = NULL) {
+  if (is.null(zlim)) {
+    # Sin zlim especificado
+    filled.contour(x, y, mat,
+                   color.palette = mis.colores,
+                   asp = 1,
+                   axes = TRUE,
+                   frame.plot = 0,
+                   xlim = c(0, ancho),
+                   ylim = c(0, alto))
+  } else {
+    # Con zlim especificado
+    filled.contour(x, y, mat,
+                   color.palette = mis.colores,
+                   asp = 1,
+                   axes = TRUE,
+                   frame.plot = 0,
+                   xlim = c(0, ancho),
+                   ylim = c(0, alto),
+                   zlim = zlim)
+  }
+}
+
+plot_3d <- function(mat, color_scale) {
+  plot_ly(z = t(mat), name = "") %>% 
+    add_surface(
+      colorscale = color_scale,
+      contours = list(
+        z = list(
+          show = TRUE,
+          usecolormap = TRUE,
+          highlightcolor = "white",
+          project = list(z = TRUE)
+        )
+      )
+    ) %>%
+    layout(
+      scene = list(
+        xaxis = list(title = "X"),
+        yaxis = list(title = "Y"),
+        zaxis = list(title = "Valor")
+      )
+    )
 }
 
 

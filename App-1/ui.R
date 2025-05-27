@@ -3,7 +3,8 @@ library(bslib)
 
 # Defición de la UI --------------------------------------------------------------------
 
-ui <- page_sidebar(
+ui <- tagList(
+  page_sidebar(
   theme = bs_theme(version = 5, bootswatch = "minty"),
   title = "TFG Estadística espacial",
   
@@ -22,8 +23,8 @@ ui <- page_sidebar(
     numericInput("ventana", "Tamaño ventana", value = 3, min = 2, step = 1),
     numericInput("solapamiento", "Solapamiento", value = 1, min = 1, step = 1),
     selectInput("modo", "Selecciona el modo:", choices = c("Simulación", "Simulación Condicionada")),
-    actionButton("button", "Calcular"),
-    actionButton("button_2", "Adjuntar")
+    actionButton("boton_simular", "Simular"),
+    actionButton("boton_adjuntar", "Adjuntar")
   ),
   
   # UI del formulario dinámico
@@ -31,7 +32,8 @@ ui <- page_sidebar(
     conditionalPanel(
       condition = "input.modo == 'Simulación Condicionada'",
       uiOutput("formulario_dinamico"),
-    )),
+    )
+  ),
   
   
   # Panel derecho con pestañas
@@ -51,7 +53,7 @@ ui <- page_sidebar(
                 uiOutput("primera_simulacion"),
               ),
     ),
-    nav_panel("Conjunto Excursión",
+    nav_panel("Conjunto de Excursión",
               fluidRow(
                 column(6, selectInput("visualizacion_excursion", "Visualización", 
                                       choices = c("2D", "3D"))),
@@ -102,5 +104,24 @@ ui <- page_sidebar(
     nav_panel("Resumen", 
               verbatimTextOutput("mensaje_resumen")
     )
+  ),
+  
+  # Footer personalizado
+  tags$footer(
+    style = "
+      position: fixed;
+      bottom: 0;
+      width: 100%;
+      background-color: #f8f9fa;
+      padding: 10px;
+      text-align: center;
+      border-top: 1px solid #dee2e6;",
+    
+    # Enlaces
+    HTML('
+    &copy; 2025 Rubén Soriano Vidal | 
+    <a href="documentacion.pdf" download style="color: #007bff;">Documentación</a>
+  ')
   )
+)
 )

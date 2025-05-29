@@ -51,9 +51,9 @@ server <- function(input, output, session) {
         if (!validar_parametro_cer_cer("realizaciones", input$realizaciones, 1, 20)) return(NULL)
       }
       
-      #Se muestra una ventana para permitir al usuario introducir valores condicionados, ya sea manualmente o mediante un archivo .csv
+      #Se muestra una ventana modal para permitir al usuario introducir valores condicionados, ya sea manualmente o mediante un archivo .csv
       showModal(modalDialog(
-        title = "Valores condicionales",
+        title = "Valores condicionantes",
         fileInput("file_input", "Sube un archivo .csv", accept =".csv"),
         tagList(
           numericInput("n_filas_modal", "Número de valores:", value = 1, min = 1),
@@ -137,8 +137,10 @@ server <- function(input, output, session) {
     
     req(input$file_input)
     # Leer el archivo CSV y validar parasimulación incondicionada
-    data <- leer_y_validar_archivo(input$file_input, añadir_z = TRUE)
+    ancho_max <- min(input$ancho, input$alto)
+    data <- leer_y_validar_archivo(input$file_input,ancho_max, añadir_z = TRUE)
     if (is.null(data)) return(NULL)
+    str(data)
     procesar_datos(data, input, output)
     
   })
@@ -222,7 +224,7 @@ server <- function(input, output, session) {
     sim_values <- as.matrix(readr::read_csv(input$archivo$datapath, col_names = TRUE, show_col_types = FALSE))
     
     # Validación de dimensiones 
-    if (!validar_dimensiones_matriz(sim_values, input$modelo, input$ancho, input$alto, input$realizaciones)) {
+    if (!validar_datos_simulados(sim_values, input$modelo, input$ancho, input$alto, input$realizaciones)) {
       return(NULL)
     }
     
@@ -251,13 +253,14 @@ server <- function(input, output, session) {
     # Leer el archivo tal cual, sin cabecera
     sim_values <- as.matrix(readr::read_csv(input$archivo$datapath, col_names = TRUE, show_col_types = FALSE))
     
+    ancho_max <- min(input$ancho, input$alto)
     # Leer el archivo CSV y validar para simulación condicionada
-    data <- leer_y_validar_archivo(input$archivo_datos_condicionados)
+    data <- leer_y_validar_archivo(input$archivo_datos_condicionados, ancho_max)
     if (is.null(data)) return(NULL)
     
     
     # Validación de dimensiones 
-    if (!validar_dimensiones_matriz(sim_values, input$modelo, input$ancho, input$alto, input$realizaciones)) {
+    if (!validar_datos_simulados(sim_values, input$modelo, input$ancho, input$alto, input$realizaciones)) {
       return(NULL)
     }
     

@@ -67,7 +67,7 @@ ui <- tagList(
                 style = " height: 100%; overflow-y: auto;",
                 uiOutput("conjunto_excursion",  width = "100%", height = "100%"),
               )),
-    nav_panel("Mapa de varianzas",
+    nav_panel("Mapa de varianza",
               fluidRow(
                 column(6, selectInput("visualizacion_varianza", "Visualización", 
                                       choices = c("2D", "3D"))),

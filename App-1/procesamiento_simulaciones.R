@@ -341,7 +341,7 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
                             "ES" = refined_values$es
     )
     
-    plot_2d(values_matrix, x, y, ancho, alto)
+    plot_2d(values_matrix, x, y, ancho, alto, c(min_z,max_z))
     
   })
   
@@ -443,7 +443,7 @@ modulo_metodologia_temporal <- function(sim_values, x, y, input, output, thresho
                             "T4" = values_matrix_list[[4]]
     )
     
-    plot_2d(values_matrix, x, y, ancho, alto)
+    plot_2d(values_matrix, x, y, ancho, alto,  c(min_z,max_z))
   })
   
   # Visualización del mapa de valores obtenido por la metodología según la medida y el instante temporal escogidos en 3D

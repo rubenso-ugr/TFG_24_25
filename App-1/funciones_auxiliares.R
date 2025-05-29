@@ -114,8 +114,9 @@ validar_parametro_cer_cer <- function(nombre, valor, min_valor, max_valor) {
   return(TRUE)
 }
 
-# Función para la validación de las dimensiones de la matriz cuando se adjuntan datos ya simulados
-validar_dimensiones_matriz <- function(sim_values, modelo, ancho, alto, realizaciones) {
+# Función para la validación de los datos ya simulados adjuntos. Se comprueba dimensiones y que todos los valores sean numéricos válidos.
+validar_datos_simulados <- function(sim_values, modelo, ancho, alto, realizaciones) {
+  
   filas_esperadas <- if (modelo == "Cauchy") {
     (ancho + 1) * (alto + 1)
   } else {
@@ -131,8 +132,19 @@ validar_dimensiones_matriz <- function(sim_values, modelo, ancho, alto, realizac
         "La matriz debe tener ", filas_esperadas, " filas y ", columnas_esperadas, " columnas.\n",
         "Pero el archivo tiene ", nrow(sim_values), " filas y ", ncol(sim_values), " columnas."
       ),
-      easyClose = TRUE,
-      footer = NULL
+      footer = modalButton("Cerrar"),
+      size = "l", easyClose = TRUE
+    ))
+    return(FALSE)
+  }
+  
+  # Validar que todos los elementos sean numéricos y finitos
+  if (!is.numeric(sim_values) || any(!is.finite(as.matrix(sim_values)))) {
+    showModal(modalDialog(
+      title = "Error en los datos",
+      "La matriz contiene valores no numéricos o no finitos.",
+      footer = modalButton("Cerrar"),
+      size = "l", easyClose = TRUE
     ))
     return(FALSE)
   }
@@ -140,32 +152,72 @@ validar_dimensiones_matriz <- function(sim_values, modelo, ancho, alto, realizac
   return(TRUE)
 }
 
-# Función para la lectura y procesamiento de archivos csv
-leer_y_validar_archivo <- function(input_file, añadir_z = FALSE) {
-  datos <- readr::read_csv(input_file$datapath)
+# Función para la lectura, procesamiento y validación de archivos csv
+leer_y_validar_archivo <- function(input_file, ancho_max, añadir_z = FALSE) {
   
+  # Leer archivo sin mostrar tipos por consola
+  datos <- readr::read_csv(input_file$datapath, show_col_types = FALSE)
+  
+  # Comprobar que tiene las columnas necesarias
   if (!all(c("x", "y", "valor") %in% names(datos))) {
     showModal(modalDialog(
       title = "Error en el archivo",
       "El archivo debe contener las columnas 'x', 'y' y 'valor'.",
-      easyClose = TRUE,
-      footer = NULL
+      footer = modalButton("Cerrar"),
+      size = "l", easyClose = TRUE
     ))
     return(NULL)
   }
   
+  # Validar que todas las columnas sean numéricas y finitas
+  if (!all(sapply(datos[c("x", "y", "valor")], is.numeric)) ||
+      !all(is.finite(unlist(datos[c("x", "y", "valor")])))) {
+    showModal(modalDialog(
+      title = "Error en los datos",
+      "Las columnas 'x', 'y' y 'valor' deben contener exclusivamente valores numéricos válidos.",
+      footer = modalButton("Cerrar"),
+      size = "l", easyClose = TRUE
+    ))
+    return(NULL)
+  }
+
+  # Verificar si hay al menos una fila válida
+  if (nrow(datos) == 0) {
+    showModal(modalDialog(
+      title = "Error en los datos",
+      "No hay filas válidas. Verifica que las columnas 'x', 'y' y 'valor' contengan al menos un conjunto de valores numéricos correctamente formateados.",
+      footer = modalButton("Cerrar"),
+      size = "l", easyClose = TRUE
+    ))
+    return(NULL)
+  }
+  
+  # Verificar que x e y estén en el rango [0, ancho_max]
+  if (any(datos$x < 0 | datos$x > ancho_max | datos$y < 0 | datos$y > ancho_max)) {
+    showModal(modalDialog(
+      title = "Error en las coordenadas",
+      paste0("Las columnas 'x' e 'y' deben tener valores dentro del intervalo [0, ", ancho_max, "]."),
+      footer = modalButton("Cerrar"),
+      size = "l", easyClose = TRUE
+    ))
+    return(NULL)
+  }
+  
+  # Reorganizar el dataframe para el modelo
   data <- data.frame(
     variable1 = datos$valor,
     coords.x1 = datos$y,
     coords.x2 = datos$x
   )
   
+  # Si se requiere, añadir tercera coordenada z = 1
   if (añadir_z) {
-    data$coords.x3 <- rep(1, nrow(datos))
+    data$coords.x3 <- rep(1, nrow(data))
   }
   
   return(data)
 }
+
 
 ## Funciones Auxiliares para la visualización ##
 

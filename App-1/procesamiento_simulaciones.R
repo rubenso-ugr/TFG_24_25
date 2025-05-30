@@ -214,7 +214,7 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output, condicio
                                  "T3" = excursion_by_time[[3]],
                                  "T4" = excursion_by_time[[4]])
     
-    if (is.null(condicionado)){
+    if  (is.null(condicionado) || input$visualizacion_excursion_temporal != "T1"){
       plot_2d(selected_excursion, x, y, ancho, alto, c(min_val, max_val_rea_time))
     }else{
       plot_2d_cond(selected_excursion, x, y, ancho, alto, condicionado, c(min_val, max_val_rea_time))

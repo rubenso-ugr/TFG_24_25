@@ -341,7 +341,7 @@ modulo_metodologia <- function(sim_values, x, y, input, output, threshold) {
                             "ES" = refined_values$es
     )
     
-    plot_2d(values_matrix, x, y, ancho, alto, c(min_z,max_z))
+    plot_2d(values_matrix, x, y, ancho, alto, c(0,1))
     
   })
   

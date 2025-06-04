@@ -390,11 +390,11 @@ procesar_ventanas_deslizantes <- function(data_matrix, threshold, percentil_2, w
         mu <- mean(fracciones_superan_umbral, na.rm = TRUE)
         sigma <- sd(fracciones_superan_umbral, na.rm = TRUE)
         z_alpha <- qnorm(1 - percentil_2)
-        var_param <- mu + sigma * z_alpha
+        var_param <- min(mu + sigma * z_alpha, 1)
         
         # VaR Monte Carlo
         sim_mc <- rnorm(10000, mean = mu, sd = sigma)
-        var_mc <- quantile(sim_mc, probs = 1 - percentil_2, na.rm = TRUE)
+        var_mc <- min(quantile(sim_mc, probs = 1 - percentil_2, na.rm = TRUE), 1)
         
         # Expected Shortfall (sobre las fracciones mayores o iguales al VaR histórico)
         es_val <- mean(fracciones_superan_umbral[fracciones_superan_umbral >= var_hist], na.rm = TRUE)

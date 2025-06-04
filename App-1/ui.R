@@ -6,7 +6,7 @@ library(bslib)
 ui <- tagList(
   page_sidebar(
   theme = bs_theme(version = 5, bootswatch = "minty"),
-  title = "TFG Estadística espacial",
+  title = "TFG Introducción a la Teoría de Medida del Riesgo y Aplicaciones",
   
   #Panel izquierdo con los diferentes inputs y opciones de atributos
   sidebar = sidebar(

@@ -331,71 +331,86 @@ procesar_ventanas_deslizantes <- function(data_matrix, threshold, percentil_2, w
   # Determinar si es análisis temporal o estático
   is_temporal <- !is.null(tiempo)
   current_threshold <- if (is_temporal) threshold[[tiempo]] else threshold
+  # Tamaño total de la ventana 
+  tamano_ventana <- window_size^2
   
   #Se recorre la malla mediante ventanas deslizantes
   for (i in seq(1, ancho, by = step)) {
     for (j in seq(1, alto, by = step)) {
       
-      #Ajuste dinámico de los tamañis de la ventana en i y j para poder recorrer todos los pixeles
-      actual_window_size_i <- min(window_size, ancho - i + 1)
-      actual_window_size_j <- min(window_size, alto - j + 1)
+      # Ajuste de i para asegurar que la ventana completa entra en el ancho
+      if ((i + window_size - 1) > ancho) {
+        i_adj <- ancho - window_size + 1
+      } else {
+        i_adj <- i
+      }
+      
+      # Ajuste de j para asegurar que la ventana completa entra en el alto
+      if ((j + window_size - 1) > alto) {
+        j_adj <- alto - window_size + 1
+      } else {
+        j_adj <- j
+      }
       
       #Indices espaciales de la ventana
-      indices_i <- i:(i + actual_window_size_i - 1)
-      indices_j <- j:(j + actual_window_size_j - 1)
+      indices_i <- i_adj:(i_adj + window_size - 1)
+      indices_j <- j_adj:(j_adj + window_size - 1)
       
       #Creación de la cuadrícula completa de coordenadas
       grid <- expand.grid(i = indices_i, j = indices_j)
       
       #Conversión a indices lineales
-      linear_indices <- (grid$i - 1) * alto + grid$j
+      linear_indices <- grid$i + (grid$j - 1) * ancho
       
       # Extracción de los datos de la ventana (entre todas las realizaciones)
       window_data <- data_matrix[linear_indices, , drop = FALSE]
       
-      # Máscara que contiene los valores que superan el umbral
-      mask_above <- window_data >= current_threshold
+      # Vector con la fracción de valores que superan el umbral por realización
+      fracciones_superan_umbral <- numeric(ncol(window_data))
       
-      # Se comprueba que haya algun valor que supere el umbral
-      if (any(mask_above)) {
+      # Bucle por cada realización
+      for (k in seq_len(ncol(window_data))) {
+        valores_realizacion <- window_data[, k]
+        #Área relativa
+        fracciones_superan_umbral[k] <- sum(valores_realizacion >= current_threshold, na.rm = TRUE) / tamano_ventana
         
-        #Se toma los valores de la ventana que han superado el primer umbral
-        filtered_data <- window_data[mask_above]
+        #Área absoluta
+        #fracciones_superan_umbral[k] <- sum(valores_realizacion >= current_threshold, na.rm = TRUE)
+      }
         
-        # Si todo NA o vacío, se asigna el primer umbral obtenido
-        if (all(is.na(filtered_data)) || length(filtered_data) == 0) {
-          var_hist <- var_param <- var_mc <- es_val <- current_threshold
-        } else {
-          
-          # VaR Histórico #
-          var_hist <- quantile(filtered_data, probs = 1 - percentil_2, na.rm = TRUE)
-          
-          # VaR Paramétrico #
-          mu <- mean(filtered_data, na.rm = TRUE)
-          sigma <- sd(filtered_data, na.rm = TRUE)
-          z_alpha <- qnorm(1 - percentil_2)
-          var_param <- mu + sigma * z_alpha
-          
-          # VaR Monte Carlo #
-          sim_mc <- rnorm(10000, mean = mu, sd = sigma)
-          var_mc <- quantile(sim_mc, probs = 1 - percentil_2, na.rm = TRUE)
-          
-          # Expected Shortfall Histórico #
-          es_val <- mean(filtered_data[filtered_data >= var_hist], na.rm = TRUE)
-        }
+      # Si todas las fracciones son NA o 0 (en el improbable caso de solo NA), usar el umbral como valor
+      if (all(is.na(fracciones_superan_umbral)) || length(fracciones_superan_umbral) == 0) {
+        var_hist <- var_param <- var_mc <- es_val <- current_threshold
+      } else {
         
-        # Asignación a las matrices correspondientes
-        if (is_temporal) {
-          refined_values$hist[[tiempo]][linear_indices]  <- var_hist
-          refined_values$param[[tiempo]][linear_indices] <- var_param
-          refined_values$mc[[tiempo]][linear_indices]    <- var_mc
-          refined_values$es[[tiempo]][linear_indices]    <- es_val
-        } else {
-          refined_values$hist[linear_indices]  <- var_hist
-          refined_values$param[linear_indices] <- var_param
-          refined_values$mc[linear_indices]    <- var_mc
-          refined_values$es[linear_indices]    <- es_val
-        }
+        # VaR Histórico sobre las fracciones
+        var_hist <- quantile(fracciones_superan_umbral, probs = 1 - percentil_2, na.rm = TRUE)
+        
+        # VaR Paramétrico
+        mu <- mean(fracciones_superan_umbral, na.rm = TRUE)
+        sigma <- sd(fracciones_superan_umbral, na.rm = TRUE)
+        z_alpha <- qnorm(1 - percentil_2)
+        var_param <- mu + sigma * z_alpha
+        
+        # VaR Monte Carlo
+        sim_mc <- rnorm(10000, mean = mu, sd = sigma)
+        var_mc <- quantile(sim_mc, probs = 1 - percentil_2, na.rm = TRUE)
+        
+        # Expected Shortfall (sobre las fracciones mayores o iguales al VaR histórico)
+        es_val <- mean(fracciones_superan_umbral[fracciones_superan_umbral >= var_hist], na.rm = TRUE)
+      }
+      
+      # Asignación a las matrices correspondientes
+      if (is_temporal) {
+        refined_values$hist[[tiempo]][linear_indices]  <- var_hist
+        refined_values$param[[tiempo]][linear_indices] <- var_param
+        refined_values$mc[[tiempo]][linear_indices]    <- var_mc
+        refined_values$es[[tiempo]][linear_indices]    <- es_val
+      } else {
+        refined_values$hist[linear_indices]  <- var_hist
+        refined_values$param[linear_indices] <- var_param
+        refined_values$mc[linear_indices]    <- var_mc
+        refined_values$es[linear_indices]    <- es_val
       }
     }
   }

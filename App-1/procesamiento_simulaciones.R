@@ -79,7 +79,7 @@ modulo_simulacion <- function(sim_values, x, y, input, output, condicionado = NU
   varianzas_vector <- apply(sim_values, 1, var)
   
   # Reestructuración a matriz
-  mapa_varianzas <- matrix(varianzas_vector, nrow = alto, ncol = ancho)
+  mapa_varianzas <- matrix(varianzas_vector, nrow = ancho, ncol = alto)
   
   #Comprobación de la opción escogida para mostrar
   output$mapa_varianzas <- renderUI({
@@ -152,7 +152,7 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output, condicio
     varianzas_vector <- apply(sim_values[start_row:end_row,], 1, var)
     
     # Reestructuración a matriz
-    varianza_by_time[[t]] <- matrix(varianzas_vector, nrow = alto, ncol = ancho)
+    varianza_by_time[[t]] <- matrix(varianzas_vector, nrow = ancho, ncol = alto)
   }
   
   # Valor máximo de la primera realización en los 4 instantes temporales

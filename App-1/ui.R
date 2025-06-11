@@ -16,7 +16,7 @@ ui <- tagList(
     numericInput("beta", "Beta", value = 0.1, min = 1e-20, step = 0.01),
     numericInput("var", "Varianza", value = 0.1, min = 1e-20, step = 0.01),
     numericInput("scale", "Escala espacial", value = 1, min = 1e-20, step = 0.01),
-    numericInput("percentil_1", "Umbral de riesgo", value = 0.15, min = 1e-20, max = 1,  0.01),
+    numericInput("percentil_1", "Umbral de riesgo", value = 0.1, min = 1e-20, max = 1,  0.01),
     numericInput("percentil_2", "Nivel de confianza", value = 0.05, min = 1e-20, max = 1,  0.01),
     numericInput("realizaciones", "Realizaciones", value = 20, min = 1, max = 500, step = 1),
     selectInput("modelo", "Elige modelo", choices = c( "Gneiting", "Cauchy")),
@@ -102,7 +102,7 @@ ui <- tagList(
                 uiOutput("metodologia_plot")
               )),
     nav_panel("Resumen", 
-              verbatimTextOutput("mensaje_resumen")
+              uiOutput("mensaje_resumen")
     )
   ),
   

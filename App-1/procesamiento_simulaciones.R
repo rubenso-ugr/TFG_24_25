@@ -11,6 +11,7 @@ modulo_simulacion <- function(sim_values, x, y, input, output, condicionado = NU
   alto <- input$alto + 1
   ancho <- input$ancho + 1
   percentil_1 <- input$percentil_1
+  nconfianza <- input$percentil_2
   
   min_val <- min(sim_values) #Valor mínimo de entre todas las simulaciones
   max_val <- max(sim_values) #Valor máximo de entre todas las simulaciones
@@ -99,11 +100,23 @@ modulo_simulacion <- function(sim_values, x, y, input, output, condicionado = NU
   
   ### Resumen ###
   
-  output$mensaje_resumen <- renderPrint({
-    cat("Min. global:", min_val, "\n")
-    cat("Max. global:", max_val, "\n")
-    cat("Max. realizacion mostrada:", max_val_rea, "\n")
-    cat("Primer umbral de riesgo: ", threshold, "\n")
+  output$mensaje_resumen <- renderUI({
+    HTML(paste0(
+      "<h4>Resumen de resultados</h4>",
+      "<pre style='font-size:14px'>",
+      "Min. global: ", min_val, "\n",
+      "Max. global: ", max_val, "\n",
+      "Max. primera realizción: ", max_val_rea, "\n",
+      "Valor umbral de riesgo: ",threshold, "\n",
+      "</pre>",
+      "<hr>",
+      "<div style='background-color:#f9f9f9; border-left: 5px solid #3EB489 ; padding: 10px; font-size:14px'>",
+      "<strong>¿Cómo interpretar el mapa de riesgo?</strong><br><br>",
+      "En el mapa de riesgo, el color de un píxel representa la <strong>proporción mínima del área</strong> que se encuentra expuesta a riesgo, por encima del umbral de peligro fijado en el ",
+      round(percentil_1 * 100), "% de los peores escenarios posibles.<br><br>",
+      "Por ejemplo, si se ha fijado un umbral en el percentil ", round((1-percentil_1) * 100), ", se desea conocer el riesgo con una confianza del ", round((1-nconfianza) * 100), "%, y un píxel muestra un valor de <strong>0.8</strong>, entonces podemos interpretar que, como mínimo, el <strong>80% del área</strong> correspondiente a ese píxel está en situación de peligro por encima del percentil ", round((1-percentil_1) * 100), ", en el ", round(nconfianza* 100), "% de los escenarios más desfavorables.<br><br>",
+      "</div>"
+    ))
   })
   
   #Se devuelve el umbral obtenido
@@ -118,6 +131,7 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output, condicio
   alto <- input$alto +1
   ancho <- input$ancho +1
   percentil_1 <- input$percentil_1
+  nconfianza <- input$percentil_2
   
   # Creación de una lista para almacenar las matrices y diferentes valores por instantes temporales
   realizations_by_time <- vector("list", n_times)
@@ -265,17 +279,29 @@ modulo_simulacion_temporal <- function(sim_values, x, y, input, output, condicio
   
   ### Resumen ###
   
-  output$mensaje_resumen <- renderPrint({
-    cat("Min. global:", min_val, "\n")
-    cat("Max. global:", max_val, "\n")
-    cat("Max. realizacion mostrada T1:", max_val_rea_by_time[[1]], "\n")
-    cat("Max. realizacion mostrada T2:", max_val_rea_by_time[[2]], "\n")
-    cat("Max. realizacion mostrada T3:", max_val_rea_by_time[[3]], "\n")
-    cat("Max. realizacion mostrada T4:", max_val_rea_by_time[[4]], "\n")
-    cat("Primer umbral de riesgo T1: ", threshold_by_time[[1]], "\n")
-    cat("Primer umbral de riesgo T2: ", threshold_by_time[[2]], "\n")
-    cat("Primer umbral de riesgo T3: ", threshold_by_time[[3]], "\n")
-    cat("Primer umbral de riesgo T4: ", threshold_by_time[[4]], "\n")
+  output$mensaje_resumen <- renderUI({
+    HTML(paste0(
+      "<h4>Resumen de resultados</h4>",
+      "<pre style='font-size:14px'>",
+      "Min. global: ", min_val, "\n",
+      "Max. global: ", max_val, "\n",
+      "Max. realización mostrada T1: ", max_val_rea_by_time[[1]], "\n",
+      "Max. realización mostrada T2: ", max_val_rea_by_time[[2]], "\n",
+      "Max. realización mostrada T3: ", max_val_rea_by_time[[3]], "\n",
+      "Max. realización mostrada T4: ", max_val_rea_by_time[[4]], "\n",
+      "Primer umbral de riesgo T1: ", threshold_by_time[[1]], "\n",
+      "Primer umbral de riesgo T2: ", threshold_by_time[[2]], "\n",
+      "Primer umbral de riesgo T3: ", threshold_by_time[[3]], "\n",
+      "Primer umbral de riesgo T4: ", threshold_by_time[[4]], "\n",
+      "</pre>",
+      "<hr>",
+      "<div style='background-color:#f9f9f9; border-left: 5px solid #3EB489 ; padding: 10px; font-size:14px'>",
+      "<strong>¿Cómo interpretar el mapa de riesgo?</strong><br><br>",
+      "En el mapa de riesgo, el color de un píxel representa la <strong>proporción mínima del área</strong> que se encuentra expuesta a riesgo, por encima del umbral de peligro fijado en el ",
+      round(percentil_1 * 100), "% de los peores escenarios posibles.<br><br>",
+      "Por ejemplo, si se ha fijado un umbral en el percentil ", round((1-percentil_1) * 100), ", se desea conocer el riesgo con una confianza del ", round((1-nconfianza) * 100), "%, y un píxel muestra un valor de <strong>0.8</strong>, entonces podemos interpretar que, como mínimo, el <strong>80% del área</strong> correspondiente a ese píxel está en situación de peligro por encima del percentil ", round((1-percentil_1) * 100), ", en el ", round(nconfianza* 100), "% de los escenarios más desfavorables.<br><br>",
+      "</div>"
+    ))
   })
   
   #Se devuelve los umbrales de todos los intantes

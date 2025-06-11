@@ -79,7 +79,6 @@ server <- function(input, output, session) {
         modelo <- RMgencauchy(alpha = input$alpha, beta = input$beta, var = input$var, scale = input$scale)
         sim <- RFsimulate(model = modelo, x = x, y = y, T = c(1, 1, 1), n = input$realizaciones)
         sim_values <- matrix(unlist(sim@data), nrow = (input$ancho+1) * (input$alto+1), ncol = input$realizaciones)
-        #write.csv(as.data.frame(sim_values), "cauchy.csv", row.names = FALSE)
         threshold <- modulo_simulacion(sim_values, x, y, input, output)
         modulo_metodologia(sim_values, x, y, input, output, threshold)
         
@@ -92,7 +91,6 @@ server <- function(input, output, session) {
         )
         sim <- RFsimulate(model = modelo, x = x, y = y, T = 1:4, n = input$realizaciones)
         sim_values <- matrix(unlist(sim@data), nrow = (input$ancho+1) * (input$alto+1) *4, ncol = input$realizaciones)
-        #write.csv(as.data.frame(sim_values), "gneiting.csv", row.names = FALSE)
         threshold_temporal <- modulo_simulacion_temporal(sim_values, x, y, input, output)
         modulo_metodologia_temporal(sim_values, x, y, input, output, threshold_temporal)
         

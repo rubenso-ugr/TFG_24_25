@@ -42,13 +42,13 @@ server <- function(input, output, session) {
       
       #Dependiendo del tipo de simulación se establecen unos máximos sobre los atributos ancho, alto y realizaciones
       if (input$modelo == "Cauchy"){
+        if (!validar_parametro_cer_cer("ancho (píxeles)", input$ancho, 3, 200)) return(NULL)
+        if (!validar_parametro_cer_cer("alto (píxeles)", input$alto, 3, 200)) return(NULL)
+        if (!validar_parametro_cer_cer("realizaciones", input$realizaciones, 1, 150)) return(NULL)
+      }else{
         if (!validar_parametro_cer_cer("ancho (píxeles)", input$ancho, 3, 100)) return(NULL)
         if (!validar_parametro_cer_cer("alto (píxeles)", input$alto, 3, 100)) return(NULL)
         if (!validar_parametro_cer_cer("realizaciones", input$realizaciones, 1, 50)) return(NULL)
-      }else{
-        if (!validar_parametro_cer_cer("ancho (píxeles)", input$ancho, 3, 50)) return(NULL)
-        if (!validar_parametro_cer_cer("alto (píxeles)", input$alto, 3, 50)) return(NULL)
-        if (!validar_parametro_cer_cer("realizaciones", input$realizaciones, 1, 20)) return(NULL)
       }
       
       #Se muestra una ventana modal para permitir al usuario introducir valores condicionados, ya sea manualmente o mediante un archivo .csv

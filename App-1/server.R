@@ -159,6 +159,8 @@ server <- function(input, output, session) {
     # Límite superior para la ventana: mínimo entre alto y ancho
     max_ventana <- min(input$ancho, input$alto)
     
+    if (max_ventana < 2) max_ventana <- 2
+    
     # Se actualiza el input de la ventana
     updateNumericInput(session, "ventana", max = max_ventana)
     

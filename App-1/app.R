@@ -7,5 +7,5 @@ library(bslib)
 source("ui.R")
 source("server.R")
 
-# Inicia la app
+# Iniciar la app
 shinyApp(ui = ui, server = server)

@@ -48,7 +48,7 @@ validar_parametro_ab_ab <- function(nombre, valor, min_valor, max_valor = Inf) {
   if (valor <= min_valor || valor >= max_valor) {
     showModal(modalDialog(
       title = paste("Error en parámetro", nombre),
-      paste("El valor de", nombre, "debe estar en el rango (", min_valor, ",", max_valor, "]."),
+      paste("El valor de", nombre, "debe estar en el rango (", min_valor, ",", max_valor, ")."),
       footer = modalButton("Cerrar"),
       size = "l", easyClose = TRUE
     ))
@@ -76,7 +76,7 @@ validar_parametro_cer_ab <- function(nombre, valor, min_valor, max_valor = Inf) 
   if (valor < min_valor || valor >= max_valor) {
     showModal(modalDialog(
       title = paste("Error en parámetro", nombre),
-      paste("El valor de", nombre, "debe estar en el rango (", min_valor, ",", max_valor, "]."),
+      paste("El valor de", nombre, "debe estar en el rango [", min_valor, ",", max_valor, ")."),
       footer = modalButton("Cerrar"),
       size = "l", easyClose = TRUE
     ))

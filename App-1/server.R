@@ -8,7 +8,7 @@ source("procesamiento_simulaciones.R")
 
 # Opciones globales
 options(shiny.useragg = FALSE)
-set.seed(123)
+#set.seed(123)
 
 # Definición del server ----------------------------------------------------------------------------
 
